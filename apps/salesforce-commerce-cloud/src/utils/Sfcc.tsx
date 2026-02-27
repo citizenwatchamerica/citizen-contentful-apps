@@ -111,8 +111,8 @@ class SfccClient {
             {
               termQuery: {
                 fields: ['type'],
-                operator: 'is',
-                values: ['master'],
+                operator: 'one_of',
+                values: ['bundle','item','master','option','retailSet','set','variant','variationGroup'],
               },
             },
           ],
