@@ -1,1 +1,0 @@
-export { RolesPermissionsFooter } from './RolesPermissionsFooter';

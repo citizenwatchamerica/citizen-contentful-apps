@@ -1,3 +1,0 @@
-const mockCma = {};
-
-export { mockCma };
