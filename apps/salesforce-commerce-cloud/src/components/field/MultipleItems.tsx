@@ -18,9 +18,10 @@ import ItemCard from './ItemCard';
 
 interface MultipleItemsProps {
   value: string[];
+  siteId: string;
 }
 
-const MultipleItems = ({ value: items }: MultipleItemsProps) => {
+const MultipleItems = ({ value: items, siteId }: MultipleItemsProps) => {
   const sdk = useSDK<FieldAppSDK>();
   const { fieldType } = sdk.parameters.instance as AppInstanceParameters;
 
@@ -53,6 +54,7 @@ const MultipleItems = ({ value: items }: MultipleItemsProps) => {
                 key={id}
                 id={id}
                 type={fieldType}
+                siteId={siteId}
                 onRemove={onRemoveItem}
                 withDragHandle={true}
               />

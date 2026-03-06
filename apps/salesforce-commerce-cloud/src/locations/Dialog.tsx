@@ -10,6 +10,7 @@ export interface DialogInvocationParameters extends KeyValueMap {
   fieldType: 'product' | 'category';
   fieldValue?: string | string[];
   currentData?: any | any[];
+  siteIds: string[];
 }
 
 const Dialog = () => {

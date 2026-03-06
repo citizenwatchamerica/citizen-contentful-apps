@@ -31,7 +31,7 @@ const ProductSearchResults = (props: SearchResultsProps) => {
         `}>
         {props.searchResults.map((result) => (
           <ProductSearchResult
-            key={props.fieldType === 'product' ? result.id : `${result.catalogId}:${result.id}`}
+            key={result.id}
             fieldType={props.fieldType}
             onItemSelect={props.onItemSelect}
             selected={props.selectedItems}
@@ -45,9 +45,9 @@ const ProductSearchResults = (props: SearchResultsProps) => {
 
 const ProductSearchResult = (props: SearchResultProps) => {
   const { result, fieldType, onItemSelect, selected } = props;
-  const resultId = fieldType === 'product' ? result.id : `${result.catalogId}:${result.id}`;
+  const resultId = result.id;
   const isSelected =
-    typeof selected === 'string' ? result.id === selected : selected?.includes(resultId);
+    typeof selected === 'string' ? selected === resultId : selected?.includes(resultId);
 
   const [imageHasLoaded, setImageHasLoaded] = useState<boolean>(false);
   const [imageHasErrored, setImageHasErrored] = useState<boolean>(false);

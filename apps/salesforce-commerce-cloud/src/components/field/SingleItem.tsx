@@ -7,6 +7,7 @@ import ItemCard from './ItemCard';
 
 interface SingleItemProps {
   value: string;
+  siteId: string;
 }
 
 const SingleItem = (props: SingleItemProps) => {
@@ -17,7 +18,7 @@ const SingleItem = (props: SingleItemProps) => {
     sdk.field.removeValue();
   };
 
-  return <ItemCard id={props.value} type={fieldType} onRemove={onRemoveItem} />;
+  return <ItemCard id={props.value} type={fieldType} siteId={props.siteId} onRemove={onRemoveItem} />;
 };
 
 export default SingleItem;

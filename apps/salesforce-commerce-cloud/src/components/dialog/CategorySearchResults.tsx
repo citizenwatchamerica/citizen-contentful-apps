@@ -24,7 +24,7 @@ const CategorySearchResults = (props: SearchResultsProps) => {
     <Box as="section" css={resultsWrapperStyle}>
       {props.searchResults.map((result) => (
         <CategorySearchResult
-          key={`${result.catalogId}:${result.id}`}
+          key={result.id}
           fieldType={props.fieldType}
           onItemSelect={props.onItemSelect}
           selected={props.selectedItems}
@@ -37,7 +37,7 @@ const CategorySearchResults = (props: SearchResultsProps) => {
 
 const CategorySearchResult = (props: SearchResultProps) => {
   const { result, fieldType, onItemSelect, selected } = props;
-  const resultId = fieldType === 'product' ? result.id : `${result.catalogId}:${result.id}`;
+  const resultId = result.id;
 
   const categoryStyle = css`
     margin-left: ${tokens.spacingXs};
@@ -49,7 +49,7 @@ const CategorySearchResult = (props: SearchResultProps) => {
       padding="none"
       marginBottom="spacingS"
       onClick={() => onItemSelect(resultId)}
-      isSelected={selected?.includes(resultId)}>
+      isSelected={typeof selected === 'string' ? selected === resultId : selected?.includes(resultId)}>
       <Flex flexDirection="column">
         <Flex alignItems="center" padding="spacingXs">
           <TagsIcon />

@@ -11,8 +11,11 @@ export interface AppInstallationParameters {
   clientSecret: string;
   organizationId: string;
   shortCode: string;
-  siteId: string;
+  siteIds: string;
 }
+
+export const parseSiteIds = (siteIds: string): string[] =>
+  siteIds.split(',').map((s) => s.trim()).filter(Boolean);
 
 const styles = {
   body: css({ paddingTop: 0 }),
@@ -28,7 +31,7 @@ const ConfigScreen = () => {
     clientSecret: '',
     organizationId: '',
     shortCode: '',
-    siteId: '',
+    siteIds: '',
   });
 
   const [valid, setValid] = useState<any>({
@@ -36,7 +39,7 @@ const ConfigScreen = () => {
     clientSecret: null,
     organizationId: null,
     shortCode: null,
-    siteId: null,
+    siteIds: null,
   });
 
   const sdk = useSDK<ConfigAppSDK>();
@@ -106,10 +109,10 @@ const ConfigScreen = () => {
         'The Short Code for your Salesforce Commerce Cloud organization, used to route data correctly.',
     },
     {
-      id: 'siteId',
-      label: 'Site ID',
+      id: 'siteIds',
+      label: 'Site IDs',
       helpText:
-        'The Site ID of the specific Salesforce Commerce Cloud site that you want to retrieve products from.',
+        'Comma-separated list of SFCC Site IDs (e.g. "SiteA, SiteB"). Each site scopes products and categories to its assigned catalog.',
     },
   ];
 
