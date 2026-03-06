@@ -11,7 +11,7 @@ import tokens from '@contentful/f36-tokens';
 
 import { AppInstanceParameters } from '../../locations/Field';
 import logo from '../../Salesforce_Corporate_Logo_RGB.png';
-import SfccClient from '../../utils/Sfcc';
+import SfccClient, { parseCategoryId } from '../../utils/Sfcc';
 import { AppInstallationParameters } from '../../locations/ConfigScreen';
 import { DialogInvocationParameters } from '../../locations/Dialog';
 
@@ -22,7 +22,12 @@ const logoStyle = css`
   margin-right: ${tokens.spacingM};
 `;
 
-const SelectItemAction = (props: { fieldValue?: string | string[] }) => {
+interface SelectItemActionProps {
+  fieldValue?: string | string[];
+  siteIds: string[];
+}
+
+const SelectItemAction = (props: SelectItemActionProps) => {
   const sdk = useSDK<FieldAppSDK>();
   const selectMultiple = sdk.field.type === 'Array';
   const { fieldType } = sdk.parameters.instance as AppInstanceParameters;
@@ -36,16 +41,16 @@ const SelectItemAction = (props: { fieldValue?: string | string[] }) => {
       : queryArray.push(props.fieldValue);
   }
 
-  const client = new SfccClient(installParameters);
+  const client = new SfccClient(installParameters, props.siteIds[0]);
   const currentItemQueries = useQueries({
-    queries: queryArray.map((id: string) => {
-      const [itemId, catalogId] = id.split(':');
+    queries: queryArray.map((rawId: string) => {
+      const id = fieldType === 'category' ? parseCategoryId(rawId) : rawId;
       return {
-        queryKey: ['itemInfo', itemId],
+        queryKey: ['itemInfo', id],
         queryFn:
           fieldType === 'product'
-            ? () => client.fetchProduct(itemId)
-            : () => client.fetchCategory(itemId, catalogId),
+            ? () => client.fetchProduct(id)
+            : () => client.fetchCategoryById(id),
       };
     }),
   });
@@ -84,6 +89,7 @@ const SelectItemAction = (props: { fieldValue?: string | string[] }) => {
       fieldType: fieldType,
       currentData: currentData,
       fieldValue: props.fieldValue,
+      siteIds: props.siteIds,
     };
 
     if (!queryArray.length || queriesComplete) {

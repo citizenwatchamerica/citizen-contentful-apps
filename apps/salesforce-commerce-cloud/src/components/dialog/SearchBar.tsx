@@ -136,11 +136,7 @@ const SelectionList = (props: SelectionListProps) => {
   // console.log(props)
   const findItemData = (itemId: string, fieldType: 'product' | 'category', itemsInfo?: any[]) => {
     if (itemsInfo?.length) {
-      return itemsInfo.find((item) => {
-        return fieldType === 'product'
-          ? item.id === itemId
-          : `${item.catalogId}:${item.id}` === itemId;
-      });
+      return itemsInfo.find((item) => item.id === itemId);
     }
   };
 

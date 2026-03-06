@@ -11,7 +11,7 @@ import { FieldAppSDK } from '@contentful/app-sdk';
 
 // Local Imports
 import { AppInstallationParameters } from '../../locations/ConfigScreen';
-import SfccClient from '../../utils/Sfcc';
+import SfccClient, { parseCategoryId } from '../../utils/Sfcc';
 
 interface ItemProps {
   id: string;
@@ -20,6 +20,7 @@ interface ItemProps {
 }
 
 interface ItemCardProps extends ItemProps {
+  siteId: string;
   withDragHandle?: boolean;
   dragHandleRender?: (props: {
     isDragging?: boolean;
@@ -30,15 +31,15 @@ interface ItemCardProps extends ItemProps {
 const ItemCard = (props: ItemCardProps) => {
   const sdk = useSDK<FieldAppSDK>();
   const installParameters = sdk.parameters.installation as AppInstallationParameters;
-  const client = new SfccClient(installParameters);
+  const client = new SfccClient(installParameters, props.siteId);
 
-  const [itemId, catalogId] = props.id.split(':');
+  const itemId = props.type === 'category' ? parseCategoryId(props.id) : props.id;
   const { isLoading, data: itemData } = useQuery({
-    queryKey: ['itemInfo', props.id],
+    queryKey: ['itemInfo', itemId],
     queryFn:
       props.type === 'product'
         ? () => client.fetchProduct(itemId)
-        : () => client.fetchCategory(itemId, catalogId),
+        : () => client.fetchCategoryById(itemId),
   });
 
   return (
