@@ -9,6 +9,7 @@ import {
   Button,
   Tooltip,
   Grid,
+  Select,
 } from '@contentful/f36-components';
 import { SearchIcon, CloseIcon, ErrorCircleIcon, AssetIcon, TagsIcon } from '@contentful/f36-icons';
 import tokens from '@contentful/f36-tokens';
@@ -27,6 +28,9 @@ interface SearchBarProps {
   onQueryChange: (event: React.ChangeEvent<HTMLInputElement>) => void;
   onSave: () => void;
   removeSelected: (id: string) => void;
+  siteIds: string[];
+  selectedSiteId: string;
+  onSiteChange: (event: React.ChangeEvent<HTMLSelectElement>) => void;
 }
 
 interface SearchControlProps extends SearchBarProps {
@@ -36,12 +40,33 @@ interface SearchControlProps extends SearchBarProps {
 // eslint-disable-next-line @typescript-eslint/no-empty-function
 const noop = () => {};
 
+const siteSelectStyles = css`
+  flex-shrink: 0;
+  min-width: 200px;
+  margin-right: ${tokens.spacingM};
+`;
+
+const SiteSelector = (props: {
+  siteIds: string[];
+  selectedSiteId: string;
+  onSiteChange: (event: React.ChangeEvent<HTMLSelectElement>) => void;
+}) => (
+  <Box css={siteSelectStyles}>
+    <Select value={props.selectedSiteId} onChange={props.onSiteChange}>
+      {props.siteIds.map((siteId) => (
+        <Select.Option key={siteId} value={siteId}>
+          {siteId}
+        </Select.Option>
+      ))}
+    </Select>
+  </Box>
+);
+
 const SearchBar = (props: SearchBarProps) => {
   const sdk = useSDK<DialogAppSDK>();
   const { fieldType } = sdk.parameters.invocation as DialogInvocationParameters;
 
   const headerStyles = css`
-    border-bottom: 1px solid ${tokens.gray300};
     padding: ${tokens.spacingM} ${tokens.spacingL} ${tokens.spacingL} ${tokens.spacingL};
     background-color: white;
     position: sticky;
@@ -53,6 +78,13 @@ const SearchBar = (props: SearchBarProps) => {
 
   return (
     <Flex as="header" justifyContent="space-between" alignItems="center" css={headerStyles}>
+      {props.siteIds.length > 1 && (
+        <SiteSelector
+          siteIds={props.siteIds}
+          selectedSiteId={props.selectedSiteId}
+          onSiteChange={props.onSiteChange}
+        />
+      )}
       <LeftSideControls {...controlProps} />
       <RightSideControls {...controlProps} />
     </Flex>
