@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 
 // Contentful Imports
-import { Modal, Select, FormControl } from '@contentful/f36-components';
+import { Modal } from '@contentful/f36-components';
 import { useSDK } from '@contentful/react-apps-toolkit';
 import { DialogAppSDK } from '@contentful/app-sdk';
 
@@ -114,6 +114,9 @@ const SearchPicker = () => {
     selectedItems: selected,
     selectedData: selectedData,
     removeSelected: onItemSelect,
+    siteIds: siteIds,
+    selectedSiteId: selectedSiteId,
+    onSiteChange: onSiteChange,
   };
 
   const SearchResultsComponent =
@@ -121,18 +124,6 @@ const SearchPicker = () => {
 
   return (
     <Modal.Content>
-      {siteIds.length > 1 && (
-        <FormControl marginBottom="spacingM">
-          <FormControl.Label>Site</FormControl.Label>
-          <Select value={selectedSiteId} onChange={onSiteChange}>
-            {siteIds.map((siteId) => (
-              <Select.Option key={siteId} value={siteId}>
-                {siteId}
-              </Select.Option>
-            ))}
-          </Select>
-        </FormControl>
-      )}
       <SearchBar {...searchBarProps} />
       {searchResults.length > 0 && (
         <SearchResultsComponent
