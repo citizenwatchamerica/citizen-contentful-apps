@@ -8,6 +8,7 @@ import SingleItem from '../components/field/SingleItem';
 import MultipleItems from '../components/field/MultipleItems';
 
 import { KeyValueMap } from 'contentful-management';
+import { AppInstallationParameters, parseSiteIds } from './ConfigScreen';
 
 export interface AppInstanceParameters extends KeyValueMap {
   fieldType: 'product' | 'category';
@@ -16,6 +17,8 @@ export interface AppInstanceParameters extends KeyValueMap {
 const Field = () => {
   useAutoResizer();
   const sdk = useSDK<FieldAppSDK>();
+  const installParameters = sdk.parameters.installation as AppInstallationParameters;
+  const siteIds = parseSiteIds(installParameters.siteIds);
 
   const selectMultiple = sdk.field.type === 'Array';
   const [value, setValue] = useState<string | string[]>(sdk.field.getValue());
@@ -33,13 +36,15 @@ const Field = () => {
       {value?.length && (
         <>
           {selectMultiple ? (
-            <MultipleItems value={value as string[]} />
+            <MultipleItems value={value as string[]} siteId={siteIds[0]} />
           ) : (
-            <SingleItem value={value as string} />
+            <SingleItem value={value as string} siteId={siteIds[0]} />
           )}
         </>
       )}
-      {(!value?.length || selectMultiple) && <SelectItemAction fieldValue={value} />}
+      {(!value?.length || selectMultiple) && (
+        <SelectItemAction fieldValue={value} siteIds={siteIds} />
+      )}
     </>
   );
 };
