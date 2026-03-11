@@ -20,14 +20,20 @@ export const height = window.outerHeight - window.outerHeight * 0.3 - headerHeig
 const SearchPicker = () => {
   const sdk = useSDK<DialogAppSDK>();
   const installParameters = sdk.parameters.installation as AppInstallationParameters;
-  const { selectMultiple, fieldType, fieldValue, currentData } = sdk.parameters
+  const { selectMultiple, fieldType, fieldValue, currentData, siteIds } = sdk.parameters
     .invocation as DialogInvocationParameters;
 
+  const [selectedSiteId, setSelectedSiteId] = useState<string>(siteIds[0]);
   const [query, setQuery] = useState<string>('');
   const [queryIsFetching, setQueryIsFetching] = useState<boolean>(false);
   const [selected, setSelected] = useState<string | string[] | undefined>(fieldValue);
   const [selectedData, setSelectedItemsInfo] = useState<any[]>(currentData || []);
   const [searchResults, setSearchResults] = useState<any[]>([]);
+
+  const onSiteChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
+    setSelectedSiteId(event.target.value);
+    setSearchResults([]);
+  };
 
   const onQueryChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     setQuery(event.target.value);
@@ -38,9 +44,7 @@ const SearchPicker = () => {
   };
 
   const findSearchResultData = (id: string) => {
-    return searchResults.find((item) => {
-      return fieldType === 'product' ? item.id === id : `${item.catalogId}:${item.id}` === id;
-    });
+    return searchResults.find((item) => item.id === id);
   };
 
   const onItemSelect = (id: string) => {
@@ -59,11 +63,8 @@ const SearchPicker = () => {
         if (includedIndex > -1) {
           // Item exists in array, unset it
           updateSelected.splice(includedIndex, 1);
-          updateSelectedData = selectedData.filter((item) => {
-            return fieldType === 'product' ? item.id === id : `${item.catalogId}:${item.id}` === id;
-          });
+          updateSelectedData = selectedData.filter((item) => item.id !== id);
         } else {
-          console.log('Item not found.');
           updateSelected.push(id);
           updateSelectedData = [...selectedData, findSearchResultData(id)];
         }
@@ -85,7 +86,7 @@ const SearchPicker = () => {
 
   useEffect(() => {
     const timeOutId = setTimeout(() => {
-      const client = new SfccClient(installParameters);
+      const client = new SfccClient(installParameters, selectedSiteId);
       const fetchResults =
         fieldType === 'product' ? client.searchProducts : client.searchCategories;
       if (query.length >= 3) {
@@ -101,7 +102,7 @@ const SearchPicker = () => {
       }
     }, 500);
     return () => clearTimeout(timeOutId);
-  }, [fieldType, query, installParameters]);
+  }, [fieldType, query, installParameters, selectedSiteId]);
 
   const searchBarProps = {
     isLoading: queryIsFetching,
@@ -113,6 +114,9 @@ const SearchPicker = () => {
     selectedItems: selected,
     selectedData: selectedData,
     removeSelected: onItemSelect,
+    siteIds: siteIds,
+    selectedSiteId: selectedSiteId,
+    onSiteChange: onSiteChange,
   };
 
   const SearchResultsComponent =

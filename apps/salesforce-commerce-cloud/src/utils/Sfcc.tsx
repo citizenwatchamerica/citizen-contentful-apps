@@ -1,7 +1,11 @@
 import axios, { AxiosInstance, InternalAxiosRequestConfig } from 'axios';
 import { AppInstallationParameters } from '../locations/ConfigScreen';
 
-// console.log(import.meta.env.VITE_PROXY_URL)
+// Handles legacy composite keys ("catalogId:categoryId") by extracting just the category ID.
+// New format stores only the category ID, so this is a no-op for new values.
+export const parseCategoryId = (id: string): string =>
+  id.includes(':') ? id.split(':').pop()! : id;
+
 const proxyUrl = import.meta.env.VITE_PROXY_URL || 'https://thawing-shore-22303.herokuapp.com/';
 
 interface SFCCAdminToken {
@@ -19,10 +23,11 @@ interface TokenProps {
 class SfccClient {
   protected client!: AxiosInstance;
   protected parameters: AppInstallationParameters;
-  protected accessToken: TokenProps | undefined;
+  protected siteId: string;
 
-  constructor(parameters: AppInstallationParameters) {
+  constructor(parameters: AppInstallationParameters, siteId: string) {
     this.parameters = parameters;
+    this.siteId = siteId;
 
     this.client = axios.create({
       baseURL: proxyUrl,
@@ -94,7 +99,7 @@ class SfccClient {
     const { data: product } = await this.client.get(
       `/product/products/v1/organizations/${this.parameters.organizationId}/products/${productId}`,
       {
-        params: { siteId: this.parameters.siteId },
+        params: { siteId: this.siteId },
       }
     );
 
@@ -139,46 +144,78 @@ class SfccClient {
       `/product/products/v1/organizations/${organizationId}/product-search`,
       data,
       {
-        params: { siteId: this.parameters.siteId },
+        params: { siteId: this.siteId },
       }
     );
 
     return searchResults.hits?.length ? searchResults.hits : [];
   };
 
-  public searchCategories = async (query?: string) => {
-    const { organizationId } = this.parameters;
+  public fetchSiteCatalogId = async (): Promise<string | null> => {
+    const cacheKey = `sfcc-catalog-${this.siteId}`;
+    const cached = sessionStorage.getItem(cacheKey);
+    if (cached) return cached;
 
-    const data: any = {
-      query: {
-        boolQuery: {
-          must: [
-            {
-              termQuery: {
-                fields: ['online'],
-                operator: 'is',
-                values: [true],
-              },
-            },
-          ],
+    try {
+      const { data: result } = await this.client.get(
+        `/product/catalogs/v1/organizations/${this.parameters.organizationId}/catalogs`
+      );
+
+      const catalog = result.data?.find((cat: any) =>
+        cat.assignedSites?.some((site: any) => site.id === this.siteId)
+      );
+
+      const catalogId = catalog?.id || null;
+      if (catalogId) {
+        sessionStorage.setItem(cacheKey, catalogId);
+      }
+      return catalogId;
+    } catch {
+      return null;
+    }
+  };
+
+  private buildCategoryQuery = (catalogId: string | null, query?: string) => {
+    const must: any[] = [
+      {
+        termQuery: {
+          fields: ['online'],
+          operator: 'is',
+          values: [true],
         },
       },
-      sorts: [
-        {
-          field: 'name',
-          sortOrder: 'asc',
+    ];
+
+    if (catalogId) {
+      must.push({
+        termQuery: {
+          fields: ['catalogId'],
+          operator: 'is',
+          values: [catalogId],
         },
-      ],
-    };
+      });
+    }
 
     if (query?.length) {
-      data.query.boolQuery.must.push({
+      must.push({
         textQuery: {
           fields: ['id', 'name'],
           searchPhrase: query,
         },
       });
     }
+
+    return {
+      query: { boolQuery: { must } },
+      sorts: [{ field: 'name', sortOrder: 'asc' }],
+    };
+  };
+
+  public searchCategories = async (query?: string) => {
+    const { organizationId } = this.parameters;
+    const catalogId = await this.fetchSiteCatalogId();
+
+    const data = this.buildCategoryQuery(catalogId, query);
 
     const { data: searchResults } = await this.client.post(
       `/product/catalogs/v1/organizations/${organizationId}/category-search`,
@@ -188,12 +225,25 @@ class SfccClient {
     return searchResults.hits?.length ? searchResults.hits : [];
   };
 
-  public fetchCategory = async (catalogId: string, categoryId: string) => {
-    const { data: category } = await this.client.get(
-      `/product/catalogs/v1/organizations/${this.parameters.organizationId}/catalogs/${catalogId}/categories/${categoryId}`
+  public fetchCategoryById = async (categoryId: string) => {
+    const { organizationId } = this.parameters;
+    const catalogId = await this.fetchSiteCatalogId();
+
+    const data = this.buildCategoryQuery(catalogId);
+    data.query.boolQuery.must.push({
+      termQuery: {
+        fields: ['id'],
+        operator: 'is',
+        values: [categoryId],
+      },
+    });
+
+    const { data: searchResults } = await this.client.post(
+      `/product/catalogs/v1/organizations/${organizationId}/category-search`,
+      data
     );
 
-    return category;
+    return searchResults.hits?.[0] || null;
   };
 }
 
