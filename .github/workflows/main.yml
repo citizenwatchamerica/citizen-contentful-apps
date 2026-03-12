@@ -2,6 +2,7 @@
 name: Deploy SFCC Contentful App
 
 on:
+  workflow_dispatch:  # allows manual trigger from GitHub UI
   push:
     branches:
       - master
