@@ -1,5 +1,5 @@
 {
-  "name": "html-to-rich-text-conversion-contentful",
+  "name": "html-field-editor",
   "version": "0.1.0",
   "private": true,
   "dependencies": {
@@ -8,7 +8,6 @@
     "@contentful/f36-tokens": "4.0.2",
     "@contentful/react-apps-toolkit": "1.2.16",
     "@contentful/rich-text-types": "16.8.5",
-    "@tiptap/extension-link": "^3.23.2",
     "@tiptap/extension-subscript": "^3.23.2",
     "@tiptap/extension-superscript": "^3.23.2",
     "@tiptap/extension-table": "^3.23.2",

@@ -1,7 +1,6 @@
 import Subscript from '@tiptap/extension-subscript';
 import Superscript from '@tiptap/extension-superscript';
 import { Table, TableCell, TableHeader, TableRow } from '@tiptap/extension-table';
-import Link from '@tiptap/extension-link';
 import Underline from '@tiptap/extension-underline';
 import { EditorContent, useEditor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
@@ -43,7 +42,6 @@ export default function RichTextEditor({ initialHtml, onChange }: Props) {
     extensions: [
       StarterKit,
       Underline,
-      Link.configure({ openOnClick: false }),
       Subscript,
       Superscript,
       Table.configure({ resizable: false }),
@@ -100,7 +98,11 @@ export default function RichTextEditor({ initialHtml, onChange }: Props) {
 
   return (
     <div className="rte-wrapper">
-      <Toolbar editor={editor} isHtmlMode={isHtmlMode} onToggleHtml={toggleMode} />
+      <Toolbar
+        editor={editor}
+        isHtmlMode={isHtmlMode}
+        onToggleHtml={toggleMode}
+      />
       {isHtmlMode ? (
         <textarea
           className="rte-source"
