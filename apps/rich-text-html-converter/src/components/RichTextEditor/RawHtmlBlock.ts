@@ -23,7 +23,8 @@ export const RawHtmlBlock = Node.create({
   },
 
   parseHTML() {
-    return [{ tag: 'div[data-type="raw-html-block"]' }];
+    // High priority so this rule wins over ProseMirror's default <div> handling.
+    return [{ tag: 'div[data-type="raw-html-block"]', priority: 1000 }];
   },
 
   renderHTML({ HTMLAttributes }) {

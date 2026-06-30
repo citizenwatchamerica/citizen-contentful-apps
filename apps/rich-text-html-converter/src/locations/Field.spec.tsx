@@ -9,9 +9,14 @@ vi.mock('@contentful/react-apps-toolkit', () => ({
 }));
 
 describe('Field component', () => {
-  it('Component text exists', () => {
+  it('shows a field-type error when the field is not Long Text', () => {
+    mockSdk.field.type = 'RichText';
     const { getByText } = render(<Field />);
+    expect(getByText(/Wrong field type/)).toBeTruthy();
+  });
 
-    expect(getByText('Hello Entry Field Component (AppId: test-app)')).toBeTruthy();
+  it('renders the editor without crashing when field type is Text', () => {
+    mockSdk.field.type = 'Text';
+    expect(() => render(<Field />)).not.toThrow();
   });
 });

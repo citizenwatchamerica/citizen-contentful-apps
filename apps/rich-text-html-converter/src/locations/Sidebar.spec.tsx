@@ -9,9 +9,18 @@ vi.mock('@contentful/react-apps-toolkit', () => ({
 }));
 
 describe('Sidebar component', () => {
-  it('Component text exists', () => {
+  it('shows empty-state note when no Rich Text fields exist', () => {
+    mockSdk.contentType.fields = [];
     const { getByText } = render(<Sidebar />);
+    expect(getByText(/No Rich Text fields found/)).toBeTruthy();
+  });
 
-    expect(getByText('Hello Sidebar Component (AppId: test-app)')).toBeTruthy();
+  it('renders a convert button for each Rich Text field', () => {
+    mockSdk.contentType.fields = [
+      { id: 'body', name: 'Body', type: 'RichText' },
+    ];
+    const { getByText } = render(<Sidebar />);
+    expect(getByText('Body')).toBeTruthy();
+    expect(getByText('Convert & Apply')).toBeTruthy();
   });
 });

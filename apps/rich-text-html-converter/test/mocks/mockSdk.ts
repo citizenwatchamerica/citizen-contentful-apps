@@ -10,6 +10,18 @@ const mockSdk: any = {
   ids: {
     app: 'test-app',
   },
+  field: {
+    type: 'Text',
+    getValue: vi.fn().mockReturnValue(''),
+    setValue: vi.fn().mockResolvedValue(undefined),
+    removeValue: vi.fn().mockResolvedValue(undefined),
+  },
+  window: {
+    startAutoResizer: vi.fn(),
+  },
+  contentType: {
+    fields: [],
+  },
 };
 
 export { mockSdk };
