@@ -1,5 +1,4 @@
 import { Editor } from '@tiptap/react';
-import { useEffect, useRef, useState } from 'react';
 
 interface Props {
   editor: Editor | null;
@@ -8,30 +7,9 @@ interface Props {
 }
 
 export default function Toolbar({ editor, isHtmlMode, onToggleHtml }: Props) {
-  const [linkUrl, setLinkUrl] = useState('');
-  const [showLink, setShowLink] = useState(false);
-  const linkAnchorRef = useRef<HTMLDivElement>(null);
-  const linkInputRef = useRef<HTMLInputElement>(null);
-
-  // Close link popover on outside click
-  useEffect(() => {
-    if (!showLink) return;
-    const handle = (e: MouseEvent) => {
-      if (!linkAnchorRef.current?.contains(e.target as Node)) setShowLink(false);
-    };
-    document.addEventListener('mousedown', handle);
-    return () => document.removeEventListener('mousedown', handle);
-  }, [showLink]);
-
-  useEffect(() => {
-    if (showLink) linkInputRef.current?.focus();
-  }, [showLink]);
-
   if (!editor) return <div className="rte-toolbar" />;
 
   const dis = isHtmlMode;
-
-  // ── Helpers ──────────────────────────────────────────────────────────────
 
   const headingLevel = (): string => {
     for (let i = 1; i <= 6; i++) {
@@ -47,31 +25,6 @@ export default function Toolbar({ editor, isHtmlMode, onToggleHtml }: Props) {
       editor.chain().focus().setHeading({ level: parseInt(val) as 1|2|3|4|5|6 }).run();
     }
   };
-
-  const openLink = () => {
-    setLinkUrl(editor.getAttributes('link').href ?? '');
-    setShowLink(true);
-  };
-
-  const applyLink = () => {
-    const raw = linkUrl.trim();
-    if (!raw) {
-      editor.chain().focus().extendMarkRange('link').unsetLink().run();
-    } else {
-      const href = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
-      editor.chain().focus().extendMarkRange('link').setLink({ href }).run();
-    }
-    setShowLink(false);
-    setLinkUrl('');
-  };
-
-  const removeLink = () => {
-    editor.chain().focus().extendMarkRange('link').unsetLink().run();
-    setShowLink(false);
-    setLinkUrl('');
-  };
-
-  // ── Render ────────────────────────────────────────────────────────────────
 
   return (
     <div className="rte-toolbar">
@@ -177,51 +130,6 @@ export default function Toolbar({ editor, isHtmlMode, onToggleHtml }: Props) {
 
       <span className="rte-divider" />
 
-      {/* Link */}
-      <div ref={linkAnchorRef} className="rte-link-anchor">
-        <Btn
-          active={editor.isActive('link')}
-          disabled={dis}
-          title="Link"
-          onPress={openLink}
-        ><LinkIcon /></Btn>
-
-        {showLink && (
-          <div className="rte-link-popover">
-            <input
-              ref={linkInputRef}
-              type="url"
-              className="rte-link-input"
-              placeholder="https://example.com"
-              value={linkUrl}
-              onChange={e => setLinkUrl(e.target.value)}
-              onKeyDown={e => {
-                if (e.key === 'Enter') { e.preventDefault(); applyLink(); }
-                if (e.key === 'Escape') setShowLink(false);
-              }}
-            />
-            <button
-              type="button"
-              className="rte-btn rte-btn-text"
-              onMouseDown={e => { e.preventDefault(); applyLink(); }}
-            >
-              Apply
-            </button>
-            {editor.isActive('link') && (
-              <button
-                type="button"
-                className="rte-btn rte-btn-danger"
-                onMouseDown={e => { e.preventDefault(); removeLink(); }}
-              >
-                Remove
-              </button>
-            )}
-          </div>
-        )}
-      </div>
-
-      <span className="rte-divider" />
-
       {/* Table */}
       <Btn
         active={false}
@@ -316,15 +224,6 @@ function HRIcon() {
       <line x1="11" y1="3.5" x2="14" y2="3.5" />
       <line x1="1" y1="11.5" x2="4" y2="11.5" />
       <line x1="11" y1="11.5" x2="14" y2="11.5" />
-    </svg>
-  );
-}
-
-function LinkIcon() {
-  return (
-    <svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M6 9.5a3.5 3.5 0 004.9-.1l1.5-1.5a3.5 3.5 0 00-4.95-4.95L6.4 4.1" />
-      <path d="M9 5.5a3.5 3.5 0 00-4.9.1L2.6 7.1a3.5 3.5 0 004.95 4.95L8.6 10.9" />
     </svg>
   );
 }

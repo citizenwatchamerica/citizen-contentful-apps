@@ -28,7 +28,6 @@ export default defineConfig(() => ({
           'contentful-vendor': [
             '@contentful/app-sdk',
             '@contentful/react-apps-toolkit',
-            '@contentful/rich-text-html-renderer',
             '@contentful/rich-text-types',
           ],
           'contentful-management': ['contentful-management'],

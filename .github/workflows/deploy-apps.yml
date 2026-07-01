@@ -8,7 +8,7 @@ on:
         required: true
         type: choice
         options:
-          - rich-text-html-converter
+          - html-field-editor
           - salesforce-commerce-cloud
   push:
     branches:
@@ -32,7 +32,7 @@ jobs:
         run: |
           # Map: app directory name -> GitHub secret suffix for CONTENTFUL_APP_DEF_ID_*
           declare -A APPS=(
-            ["rich-text-html-converter"]="RICH_TEXT_HTML_CONVERTER"
+            ["html-field-editor"]="HTML_FIELD_EDITOR"
             ["salesforce-commerce-cloud"]="SALESFORCE_COMMERCE_CLOUD"
           )
 

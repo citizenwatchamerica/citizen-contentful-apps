@@ -1,16 +1,19 @@
 /**
- * Block-level tags that TipTap natively understands.
- * Everything else at the top level gets preserved as a RawHtmlBlock.
+ * Block-level tags that TipTap natively understands WITHOUT any extra
+ * attributes. If a tag is in this set AND has no attributes, TipTap can
+ * render it correctly. If it has attributes (class, id, style, …) those
+ * would be silently stripped by TipTap's schema, so we still preserve such
+ * elements as RawHtmlBlocks.
  */
-const KNOWN_BLOCKS = new Set([
+const KNOWN_BARE_BLOCKS = new Set([
   'p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
   'ul', 'ol', 'blockquote', 'hr', 'pre', 'table',
 ]);
 
 /**
- * Walk top-level children of <body>. Any element whose tag is not in
- * KNOWN_BLOCKS gets replaced with a `<div data-type="raw-html-block">`
- * marker that the RawHtmlBlock extension can parse.
+ * Walk top-level children of <body>. Any element that TipTap would modify
+ * (unknown tag, or a known tag that carries attributes TipTap would strip)
+ * gets replaced with a `<div data-type="raw-html-block">` marker.
  */
 export function preprocessHtml(html: string): string {
   if (!html.trim()) return html;
@@ -21,7 +24,10 @@ export function preprocessHtml(html: string): string {
   for (const node of Array.from(body.childNodes)) {
     if (node.nodeType !== Node.ELEMENT_NODE) continue;
     const el = node as Element;
-    if (KNOWN_BLOCKS.has(el.tagName.toLowerCase())) continue;
+    const tag = el.tagName.toLowerCase();
+
+    // Let TipTap handle bare known blocks (no extra attributes on the element).
+    if (KNOWN_BARE_BLOCKS.has(tag) && el.attributes.length === 0) continue;
 
     const marker = doc.createElement('div');
     marker.setAttribute('data-type', 'raw-html-block');

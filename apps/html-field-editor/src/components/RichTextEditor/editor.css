@@ -134,43 +134,6 @@
   cursor: not-allowed;
 }
 
-/* ── Link popover ── */
-.rte-link-anchor {
-  position: relative;
-}
-
-.rte-link-popover {
-  position: absolute;
-  top: calc(100% + 6px);
-  left: 0;
-  z-index: 200;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 8px;
-  background: #fff;
-  border: 1px solid #cfd9e0;
-  border-radius: 6px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
-  white-space: nowrap;
-}
-
-.rte-link-input {
-  height: 28px;
-  width: 240px;
-  padding: 0 10px;
-  border: 1px solid #cfd9e0;
-  border-radius: 4px;
-  font-size: 13px;
-  outline: none;
-  color: #152233;
-}
-
-.rte-link-input:focus {
-  border-color: #0059c8;
-  box-shadow: 0 0 0 2px rgba(0, 89, 200, 0.15);
-}
-
 /* ── Editor content area ── */
 .rte-content {
   background: #fff;
