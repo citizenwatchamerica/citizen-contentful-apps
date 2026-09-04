@@ -10,6 +10,7 @@ on:
         options:
           - html-field-editor
           - salesforce-commerce-cloud
+          - regional-publishing
   push:
     branches:
       - master
@@ -34,6 +35,7 @@ jobs:
           declare -A APPS=(
             ["html-field-editor"]="HTML_FIELD_EDITOR"
             ["salesforce-commerce-cloud"]="SALESFORCE_COMMERCE_CLOUD"
+            ["regional-publishing"]="REGIONAL_PUBLISHING"
           )
 
           includes=()
