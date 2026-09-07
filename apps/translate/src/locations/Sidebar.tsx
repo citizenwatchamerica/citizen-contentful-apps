@@ -1,11 +1,29 @@
 import { SidebarAppSDK } from '@contentful/app-sdk';
 import { Button, Flex, Note, Subheading } from '@contentful/f36-components';
+import tokens from '@contentful/f36-tokens';
 import { useAutoResizer, useSDK } from '@contentful/react-apps-toolkit';
+import { css } from 'emotion';
 import { useMemo, useState } from 'react';
 import { AppInstallationParameters, getTranslationConfig } from '../utils/permissions';
 import { FieldTranslationOutcome, translateEntryFields } from '../utils/translateFields';
 
 type Status = 'idle' | 'translating' | 'success' | 'error';
+
+// Forma36's Button has no built-in orange variant (blue/green/red only) - orange reads as
+// "this is an interstitial/in-progress step", distinct from Regional Publishing's green
+// "final" Publish action, so it's layered on top of `primary` via Forma36's own warning tokens.
+const orangeButtonStyles = css({
+  backgroundColor: tokens.colorWarning,
+  borderColor: tokens.colorWarning,
+  '&:hover:not(:disabled)': {
+    backgroundColor: tokens.orange600,
+    borderColor: tokens.orange600,
+  },
+  '&:disabled': {
+    backgroundColor: tokens.orange200,
+    borderColor: tokens.orange200,
+  },
+});
 
 // Mirrors the same non-Error rejection shape handling as the Regional Publishing app -
 // sdk.cma calls are proxied through the app iframe's postMessage bridge, which can reject
@@ -81,6 +99,7 @@ const Sidebar = () => {
       <Subheading>Translate</Subheading>
       <Button
         variant="primary"
+        className={orangeButtonStyles}
         isFullWidth
         isDisabled={status === 'translating'}
         isLoading={status === 'translating'}
