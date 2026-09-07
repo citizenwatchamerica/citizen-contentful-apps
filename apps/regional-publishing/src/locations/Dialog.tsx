@@ -1,5 +1,5 @@
 import { DialogAppSDK } from '@contentful/app-sdk';
-import { Button, Checkbox, Flex, Paragraph, TextLink } from '@contentful/f36-components';
+import { Button, Checkbox, Flex, List, ListItem, Paragraph, Subheading } from '@contentful/f36-components';
 import { useSDK } from '@contentful/react-apps-toolkit';
 import { useState } from 'react';
 
@@ -37,28 +37,30 @@ const Dialog = () => {
         ))}
       </Flex>
 
-      <TextLink as="button" onClick={() => setSelectedLocales(allSelected ? [] : allowedLocales)}>
-        {allSelected ? 'Select none' : 'Select all'}
-      </TextLink>
+      <Button
+        variant="positive"
+        isFullWidth
+        isDisabled={selectedLocales.length === 0}
+        onClick={() => sdk.close(selectedLocales)}
+      >
+        {allSelected
+          ? `Publish all my regions (${selectedLocales.length})`
+          : `Publish selected regions (${selectedLocales.length})`}
+      </Button>
+      <Button variant="secondary" isFullWidth onClick={() => sdk.close(null)}>
+        Cancel
+      </Button>
 
       {excludedLocales.length > 0 && (
-        <Paragraph>Not affected by this publish: {excludedLocales.join(', ')}</Paragraph>
+        <Flex flexDirection="column" gap="spacingXs">
+          <Subheading>Not being published</Subheading>
+          <List>
+            {excludedLocales.map(locale => (
+              <ListItem key={locale}>{locale}</ListItem>
+            ))}
+          </List>
+        </Flex>
       )}
-
-      <Flex gap="spacingS" justifyContent="flex-end">
-        <Button variant="secondary" onClick={() => sdk.close(null)}>
-          Cancel
-        </Button>
-        <Button
-          variant="positive"
-          isDisabled={selectedLocales.length === 0}
-          onClick={() => sdk.close(selectedLocales)}
-        >
-          {allSelected
-            ? `Publish all my regions (${selectedLocales.length})`
-            : `Publish selected regions (${selectedLocales.length})`}
-        </Button>
-      </Flex>
     </Flex>
   );
 };
