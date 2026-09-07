@@ -5,7 +5,14 @@ import type {
   FunctionTypeEnum,
 } from '@contentful/node-apps-toolkit';
 
+// The App Action's declared call parameters are validated against its manifest schema, which
+// only supports Boolean/Symbol/Number/Enum values - no arrays - so the whole payload (including
+// the texts array) travels as one JSON-stringified Symbol parameter instead of separate fields.
 type TranslateParams = {
+  payload: string;
+};
+
+type TranslatePayload = {
   texts: string[];
   sourceLocale: string;
   targetLocale: string;
@@ -39,7 +46,13 @@ export const handler: FunctionEventHandler<FunctionTypeEnum.AppActionCall> = asy
   event: AppActionRequest<'Custom', TranslateParams>,
   context: FunctionEventContext<InstallationParameters>
 ) => {
-  const { texts, sourceLocale, targetLocale, guidance } = event.body;
+  let payload: TranslatePayload;
+  try {
+    payload = JSON.parse(event.body.payload);
+  } catch {
+    throw new Error('Payload was not valid JSON.');
+  }
+  const { texts, sourceLocale, targetLocale, guidance } = payload;
   const apiKey = context.appInstallationParameters?.openaiApiKey;
 
   if (!apiKey) {

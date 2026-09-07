@@ -47,16 +47,22 @@ const callTranslateAction = async (
   // createWithResponse triggers the App Action and waits for its response in one call, but
   // returns the older webhook-style shape (statusCode/response.body as a JSON string, plus
   // an errors array) rather than the newer structured {status, result, error}.
+  // The App Action's declared parameter schema is validated against the call payload (proven
+  // by an actual "The property \"texts\" is not expected" 422), and Contentful's parameter
+  // types are limited to Boolean/Symbol/Number/Enum - no arrays - so everything travels as one
+  // JSON-stringified `payload` Symbol parameter instead of separate fields.
   const call = await sdk.cma.appActionCall.createWithResponse(
     // sdk.ids.app is always set for a sidebar location - it's just typed optional because
     // not every location provides it.
     { appActionId: TRANSLATE_APP_ACTION_ID, appDefinitionId: sdk.ids.app! },
     {
       parameters: {
-        texts,
-        sourceLocale: config.source,
-        targetLocale: config.target,
-        guidance: config.guidance,
+        payload: JSON.stringify({
+          texts,
+          sourceLocale: config.source,
+          targetLocale: config.target,
+          guidance: config.guidance,
+        }),
       },
     }
   );

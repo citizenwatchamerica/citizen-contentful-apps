@@ -21,7 +21,14 @@
       "type": "function-invocation",
       "functionId": "translateText",
       "category": "Custom",
-      "parameters": []
+      "parameters": [
+        {
+          "id": "payload",
+          "name": "Payload (JSON: texts, sourceLocale, targetLocale, guidance)",
+          "type": "Symbol",
+          "required": true
+        }
+      ]
     }
   ]
 }
