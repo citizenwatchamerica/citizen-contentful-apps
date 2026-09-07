@@ -11,6 +11,7 @@ on:
           - html-field-editor
           - salesforce-commerce-cloud
           - regional-publishing
+          - translate
   push:
     branches:
       - master
@@ -36,6 +37,7 @@ jobs:
             ["html-field-editor"]="HTML_FIELD_EDITOR"
             ["salesforce-commerce-cloud"]="SALESFORCE_COMMERCE_CLOUD"
             ["regional-publishing"]="REGIONAL_PUBLISHING"
+            ["translate"]="TRANSLATE"
           )
 
           includes=()
@@ -83,6 +85,14 @@ jobs:
 
       - run: npm run build
         working-directory: apps/${{ matrix.app }}
+
+      - name: Build and merge Contentful Functions, if this app has any
+        working-directory: apps/${{ matrix.app }}
+        run: |
+          if [ -f contentful-app-manifest.json ]; then
+            npm run build-functions
+            cp -r build/functions dist/functions
+          fi
 
       - run: npm run deploy
         working-directory: apps/${{ matrix.app }}

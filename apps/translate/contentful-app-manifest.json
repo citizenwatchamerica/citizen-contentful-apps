@@ -1,0 +1,27 @@
+{
+  "functions": [
+    {
+      "id": "translateText",
+      "name": "Translate Text",
+      "description": "Translates a batch of source-locale strings into a target locale via OpenAI.",
+      "path": "functions/translate.js",
+      "entryFile": "functions/translate.ts",
+      "allowNetworks": [
+        "api.openai.com"
+      ],
+      "accepts": [
+        "appaction.call"
+      ]
+    }
+  ],
+  "actions": [
+    {
+      "id": "translateText",
+      "name": "Translate Text",
+      "type": "function-invocation",
+      "functionId": "translateText",
+      "category": "Custom",
+      "parameters": []
+    }
+  ]
+}
