@@ -24,16 +24,17 @@ describe('Sidebar component', () => {
     expect(getByText(/isn't configured to publish any locales/)).toBeTruthy();
   });
 
-  it('lists allowed and excluded locales for a scoped role', () => {
+  it('renders just the Publish button for a scoped role, leaving the region breakdown to the dialog', () => {
     mockSdk.user.spaceMembership = {
       admin: false,
       roles: [{ name: 'US Editor' }],
     };
     mockSdk.parameters.installation = { roleLocaleMap: { 'US Editor': ['en-US'] } };
 
-    const { getByText } = render(<Sidebar />);
-    expect(getByText("You're responsible for: en-US")).toBeTruthy();
-    expect(getByText('Not affected by this publish: en-GB')).toBeTruthy();
+    const { getByText, queryByText } = render(<Sidebar />);
+    expect(getByText('Publish')).toBeTruthy();
+    expect(queryByText(/responsible for/)).toBeNull();
+    expect(queryByText(/Not affected/)).toBeNull();
   });
 
   it('opens the review dialog with the allowed and excluded locales, then publishes what the dialog returns', async () => {

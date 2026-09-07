@@ -1,5 +1,5 @@
 import { SidebarAppSDK } from '@contentful/app-sdk';
-import { Button, Flex, Note, Paragraph, Subheading } from '@contentful/f36-components';
+import { Button, Flex, Note, Subheading } from '@contentful/f36-components';
 import { useAutoResizer, useSDK } from '@contentful/react-apps-toolkit';
 import { useMemo, useState } from 'react';
 import { AppInstallationParameters, getAllowedLocales } from '../utils/permissions';
@@ -61,12 +61,9 @@ const Sidebar = () => {
   return (
     <Flex flexDirection="column" gap="spacingM">
       <Subheading>Regional Publishing</Subheading>
-      <Paragraph>You're responsible for: {allowedLocales.join(', ')}</Paragraph>
-      {excludedLocales.length > 0 && (
-        <Note variant="neutral">Not affected by this publish: {excludedLocales.join(', ')}</Note>
-      )}
       <Button
         variant="positive"
+        isFullWidth
         isDisabled={status === 'publishing'}
         isLoading={status === 'publishing'}
         onClick={handlePublish}
