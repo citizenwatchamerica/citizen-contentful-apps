@@ -83,11 +83,25 @@ const Sidebar = () => {
   };
 
   if (!config) {
+    // Temporary debug detail while diagnosing a "not configured" report on an aliased
+    // environment that isn't reproducible via direct API checks - remove once resolved.
+    const roleNames = sdk.user.spaceMembership.roles.map(r => r.name).join(', ') || '(none)';
+    const rawMap = parameters?.roleTranslationMap;
+    const rawMapPreview =
+      typeof rawMap === 'string' ? `"${rawMap.slice(0, 120)}${rawMap.length > 120 ? '…' : ''}" (${rawMap.length} chars)` : String(rawMap);
+
     return (
-      <Note variant="warning">
-        Your role isn't configured for translation. Contact an admin to update the Translate app
-        configuration.
-      </Note>
+      <Flex flexDirection="column" gap="spacingS">
+        <Note variant="warning">
+          Your role isn't configured for translation. Contact an admin to update the Translate app
+          configuration.
+        </Note>
+        <Note variant="neutral">
+          Debug: admin={String(sdk.user.spaceMembership.admin)}, roles=[{roleNames}], env=
+          {sdk.ids.environment}, envAlias={String(sdk.ids.environmentAlias)}, roleTranslationMap=
+          {rawMapPreview}
+        </Note>
+      </Flex>
     );
   }
 
