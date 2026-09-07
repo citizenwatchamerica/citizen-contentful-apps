@@ -30,7 +30,8 @@ const Sidebar = () => {
     const selectedLocales = await sdk.dialogs.openCurrentApp({
       title: 'Publish regions',
       width: 'small',
-      minHeight: 250,
+      minHeight: 450,
+      allowHeightOverflow: true,
       parameters: { allowedLocales, excludedLocales },
     });
 
