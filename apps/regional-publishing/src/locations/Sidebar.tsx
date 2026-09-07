@@ -8,17 +8,32 @@ import { publishLocales } from '../utils/publishLocales';
 
 type Status = 'idle' | 'publishing' | 'success' | 'error';
 
-// contentful-management wraps API errors as an Error whose `.message` is the raw JSON
-// response body — pull the human-readable `message` field out of it when present.
+// contentful-management normally wraps API errors as an Error whose `.message` is the raw
+// JSON response body, but calls proxied through the app iframe's postMessage bridge (as
+// sdk.cma is) can arrive as a plain object instead of a real Error instance - handle both,
+// and pull the human-readable `message` field out of any JSON we find along the way.
 const extractErrorMessage = (err: unknown): string => {
-  if (err instanceof Error) {
+  if (typeof err === 'string') return err;
+
+  const rawMessage = err instanceof Error ? err.message : (err as { message?: unknown })?.message;
+
+  if (typeof rawMessage === 'string') {
     try {
-      const parsed = JSON.parse(err.message);
-      return typeof parsed?.message === 'string' ? parsed.message : err.message;
+      const parsed = JSON.parse(rawMessage);
+      return typeof parsed?.message === 'string' ? parsed.message : rawMessage;
     } catch {
-      return err.message;
+      return rawMessage;
     }
   }
+
+  if (err && typeof err === 'object') {
+    try {
+      return JSON.stringify(err);
+    } catch {
+      // fall through
+    }
+  }
+
   return 'Unknown error';
 };
 

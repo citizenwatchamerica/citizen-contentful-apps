@@ -59,6 +59,30 @@ describe('Sidebar component', () => {
     await waitFor(() => expect(getByText('Published en-US.')).toBeTruthy());
   });
 
+  it('shows the real error message when the CMA call rejects with a JSON-message Error', async () => {
+    mockSdk.user.spaceMembership = { admin: true, roles: [] };
+    mockSdk.parameters.installation = { roleLocaleMap: {} };
+    mockSdk.dialogs.openCurrentApp.mockResolvedValue(['en-US']);
+    mockSdk.cma.entry.publish.mockRejectedValueOnce(new Error('{"message":"Validation failed"}'));
+
+    const { getByText } = render(<Sidebar />);
+    fireEvent.click(getByText('Publish'));
+
+    await waitFor(() => expect(getByText('Publish failed: Validation failed')).toBeTruthy());
+  });
+
+  it('shows the real error message when the CMA call rejects with a plain object, not an Error', async () => {
+    mockSdk.user.spaceMembership = { admin: true, roles: [] };
+    mockSdk.parameters.installation = { roleLocaleMap: {} };
+    mockSdk.dialogs.openCurrentApp.mockResolvedValue(['en-US']);
+    mockSdk.cma.entry.publish.mockRejectedValueOnce({ status: 422, message: 'Entry is invalid' });
+
+    const { getByText } = render(<Sidebar />);
+    fireEvent.click(getByText('Publish'));
+
+    await waitFor(() => expect(getByText('Publish failed: Entry is invalid')).toBeTruthy());
+  });
+
   it('does nothing when the dialog is cancelled', async () => {
     mockSdk.user.spaceMembership = { admin: true, roles: [] };
     mockSdk.parameters.installation = { roleLocaleMap: {} };
