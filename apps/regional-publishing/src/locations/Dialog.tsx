@@ -1,16 +1,28 @@
 import { DialogAppSDK } from '@contentful/app-sdk';
-import { Button, Checkbox, Flex, List, ListItem, Paragraph, Subheading } from '@contentful/f36-components';
+import {
+  Button,
+  Checkbox,
+  EntityStatusBadge,
+  Flex,
+  List,
+  ListItem,
+  Paragraph,
+  Subheading,
+} from '@contentful/f36-components';
 import { useSDK } from '@contentful/react-apps-toolkit';
 import { useState } from 'react';
+import { LocaleStatus } from '../utils/localeStatus';
 
 interface DialogInvocationParams {
   allowedLocales: string[];
   excludedLocales: string[];
+  localeStatus: Record<string, LocaleStatus>;
 }
 
 const Dialog = () => {
   const sdk = useSDK<DialogAppSDK>();
-  const { allowedLocales, excludedLocales } = sdk.parameters.invocation as unknown as DialogInvocationParams;
+  const { allowedLocales, excludedLocales, localeStatus } =
+    sdk.parameters.invocation as unknown as DialogInvocationParams;
 
   const [selectedLocales, setSelectedLocales] = useState<string[]>(allowedLocales);
 
@@ -26,14 +38,16 @@ const Dialog = () => {
 
       <Flex flexDirection="column" gap="spacingXs">
         {allowedLocales.map(locale => (
-          <Checkbox
-            key={locale}
-            id={`dialog-publish-${locale}`}
-            isChecked={selectedLocales.includes(locale)}
-            onChange={e => toggleLocale(locale, (e.target as HTMLInputElement).checked)}
-          >
-            {locale}
-          </Checkbox>
+          <Flex key={locale} alignItems="center" gap="spacingXs">
+            <Checkbox
+              id={`dialog-publish-${locale}`}
+              isChecked={selectedLocales.includes(locale)}
+              onChange={e => toggleLocale(locale, (e.target as HTMLInputElement).checked)}
+            >
+              {locale}
+            </Checkbox>
+            {localeStatus[locale] && <EntityStatusBadge entityStatus={localeStatus[locale]} />}
+          </Flex>
         ))}
       </Flex>
 
@@ -56,7 +70,12 @@ const Dialog = () => {
           <Subheading>Not being published</Subheading>
           <List>
             {excludedLocales.map(locale => (
-              <ListItem key={locale}>{locale}</ListItem>
+              <ListItem key={locale}>
+                <Flex alignItems="center" gap="spacingXs">
+                  {locale}
+                  {localeStatus[locale] && <EntityStatusBadge entityStatus={localeStatus[locale]} />}
+                </Flex>
+              </ListItem>
             ))}
           </List>
         </Flex>

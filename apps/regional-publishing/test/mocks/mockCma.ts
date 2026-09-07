@@ -6,6 +6,7 @@ const mockCma: any = {
   },
   entry: {
     publish: vi.fn().mockResolvedValue(undefined),
+    get: vi.fn().mockResolvedValue({ sys: { fieldStatus: { '*': {} } } }),
   },
 };
 

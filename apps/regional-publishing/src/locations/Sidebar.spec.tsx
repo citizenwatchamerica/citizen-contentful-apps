@@ -48,7 +48,11 @@ describe('Sidebar component', () => {
     await waitFor(() => expect(mockSdk.dialogs.openCurrentApp).toHaveBeenCalledTimes(1));
     expect(mockSdk.dialogs.openCurrentApp).toHaveBeenCalledWith(
       expect.objectContaining({
-        parameters: { allowedLocales: ['en-US'], excludedLocales: ['en-GB'] },
+        parameters: {
+          allowedLocales: ['en-US'],
+          excludedLocales: ['en-GB'],
+          localeStatus: { 'en-US': 'draft', 'en-GB': 'draft' },
+        },
       })
     );
 

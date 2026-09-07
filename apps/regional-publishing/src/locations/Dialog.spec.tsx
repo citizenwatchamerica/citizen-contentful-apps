@@ -13,18 +13,22 @@ describe('Dialog component', () => {
     mockSdk.parameters.invocation = {
       allowedLocales: ['en-US', 'en-GB'],
       excludedLocales: ['fr-FR'],
+      localeStatus: { 'en-US': 'changed', 'en-GB': 'published', 'fr-FR': 'draft' },
     };
   });
 
   afterEach(cleanup);
 
-  it('lists a checkbox per allowed locale, all checked by default, and lists the excluded ones', () => {
+  it('lists a checkbox and status badge per allowed locale, all checked by default, and lists the excluded ones', () => {
     const { getByText, container } = render(<Dialog />);
 
     expect(container.querySelector('#dialog-publish-en-US')).toHaveProperty('checked', true);
     expect(container.querySelector('#dialog-publish-en-GB')).toHaveProperty('checked', true);
+    expect(getByText('changed')).toBeTruthy();
+    expect(getByText('published')).toBeTruthy();
     expect(getByText('Not being published')).toBeTruthy();
     expect(getByText('fr-FR')).toBeTruthy();
+    expect(getByText('draft')).toBeTruthy();
     expect(getByText('Publish all my regions (2)')).toBeTruthy();
   });
 
