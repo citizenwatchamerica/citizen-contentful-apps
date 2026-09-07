@@ -52,6 +52,7 @@ describe('Sidebar component', () => {
           allowedLocales: ['en-US'],
           excludedLocales: ['en-GB'],
           localeStatus: { 'en-US': 'draft', 'en-GB': 'draft' },
+          localeNames: { 'en-US': 'English (United States)', 'en-GB': 'English (United Kingdom)' },
         },
       })
     );

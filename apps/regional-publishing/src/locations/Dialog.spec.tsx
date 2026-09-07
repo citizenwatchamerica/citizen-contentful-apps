@@ -14,20 +14,27 @@ describe('Dialog component', () => {
       allowedLocales: ['en-US', 'en-GB'],
       excludedLocales: ['fr-FR'],
       localeStatus: { 'en-US': 'changed', 'en-GB': 'published', 'fr-FR': 'draft' },
+      localeNames: {
+        'en-US': 'English (United States)',
+        'en-GB': 'English (United Kingdom)',
+        'fr-FR': 'French (France)',
+      },
     };
   });
 
   afterEach(cleanup);
 
-  it('lists a checkbox and status badge per allowed locale, all checked by default, and lists the excluded ones', () => {
+  it('lists a checkbox and status badge per allowed locale (by display name), all checked by default, and lists the excluded ones', () => {
     const { getByText, container } = render(<Dialog />);
 
     expect(container.querySelector('#dialog-publish-en-US')).toHaveProperty('checked', true);
     expect(container.querySelector('#dialog-publish-en-GB')).toHaveProperty('checked', true);
+    expect(getByText('English (United States)')).toBeTruthy();
+    expect(getByText('English (United Kingdom)')).toBeTruthy();
     expect(getByText('changed')).toBeTruthy();
     expect(getByText('published')).toBeTruthy();
     expect(getByText('Not being published')).toBeTruthy();
-    expect(getByText('fr-FR')).toBeTruthy();
+    expect(getByText('French (France)')).toBeTruthy();
     expect(getByText('draft')).toBeTruthy();
     expect(getByText('Publish all my regions (2)')).toBeTruthy();
   });

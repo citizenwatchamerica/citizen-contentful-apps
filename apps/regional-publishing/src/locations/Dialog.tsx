@@ -17,11 +17,12 @@ interface DialogInvocationParams {
   allowedLocales: string[];
   excludedLocales: string[];
   localeStatus: Record<string, LocaleStatus>;
+  localeNames: Record<string, string>;
 }
 
 const Dialog = () => {
   const sdk = useSDK<DialogAppSDK>();
-  const { allowedLocales, excludedLocales, localeStatus } =
+  const { allowedLocales, excludedLocales, localeStatus, localeNames } =
     sdk.parameters.invocation as unknown as DialogInvocationParams;
 
   const [selectedLocales, setSelectedLocales] = useState<string[]>(allowedLocales);
@@ -44,7 +45,7 @@ const Dialog = () => {
               isChecked={selectedLocales.includes(locale)}
               onChange={e => toggleLocale(locale, (e.target as HTMLInputElement).checked)}
             >
-              {locale}
+              {localeNames[locale] ?? locale}
             </Checkbox>
             {localeStatus[locale] && <EntityStatusBadge entityStatus={localeStatus[locale]} />}
           </Flex>
@@ -72,7 +73,7 @@ const Dialog = () => {
             {excludedLocales.map(locale => (
               <ListItem key={locale}>
                 <Flex alignItems="center" gap="spacingXs">
-                  {locale}
+                  {localeNames[locale] ?? locale}
                   {localeStatus[locale] && <EntityStatusBadge entityStatus={localeStatus[locale]} />}
                 </Flex>
               </ListItem>

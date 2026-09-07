@@ -15,6 +15,7 @@ const mockSdk: any = {
   },
   locales: {
     available: ['en-US', 'en-GB'],
+    names: { 'en-US': 'English (United States)', 'en-GB': 'English (United Kingdom)' },
   },
   user: {
     spaceMembership: {

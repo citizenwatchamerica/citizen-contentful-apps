@@ -47,6 +47,7 @@ const Sidebar = () => {
 
   const parameters = sdk.parameters.installation as AppInstallationParameters;
   const spaceLocales = sdk.locales.available;
+  const localeNames = sdk.locales.names;
 
   const allowedLocales = useMemo(
     () => getAllowedLocales(sdk.user.spaceMembership, parameters, spaceLocales),
@@ -68,7 +69,7 @@ const Sidebar = () => {
       width: 'small',
       minHeight: 450,
       allowHeightOverflow: true,
-      parameters: { allowedLocales, excludedLocales, localeStatus },
+      parameters: { allowedLocales, excludedLocales, localeStatus, localeNames },
     });
 
     if (!selectedLocales || selectedLocales.length === 0) {
