@@ -5,7 +5,7 @@ const mockCma: any = {
     getMany: vi.fn().mockResolvedValue({ items: [] }),
   },
   appActionCall: {
-    createWithResult: vi.fn(),
+    createWithResponse: vi.fn(),
   },
 };
 

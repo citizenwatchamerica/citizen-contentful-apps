@@ -11,18 +11,46 @@ export interface FieldTranslationOutcome {
   fieldName: string;
 }
 
+// Pulls a human-readable message out of whatever shape the failed call's body/errors take -
+// Contentful doesn't document the exact JSON shape a thrown Function error lands in here.
+const extractFailureMessage = (call: {
+  errors?: unknown[];
+  response?: { body?: string };
+}): string => {
+  if (Array.isArray(call.errors) && call.errors.length > 0) {
+    const first = call.errors[0] as { message?: string; detail?: string } | string;
+    if (typeof first === 'string') return first;
+    if (first?.message) return first.message;
+    if (first?.detail) return first.detail;
+  }
+
+  if (typeof call.response?.body === 'string') {
+    try {
+      const parsed = JSON.parse(call.response.body);
+      if (typeof parsed?.message === 'string') return parsed.message;
+      if (typeof parsed?.error === 'string') return parsed.error;
+    } catch {
+      if (call.response.body.trim().length > 0) return call.response.body;
+    }
+  }
+
+  return 'Translation failed';
+};
+
 const callTranslateAction = async (
   sdk: SidebarAppSDK,
   texts: string[],
   config: TranslationConfig
 ): Promise<string[]> => {
-  // contentful-management's typed appActionCall (pinned to this app's older app-sdk) only
-  // models 'create' | 'getCallDetails' | 'createWithResponse' - it predates the newer
-  // 'createWithResult' convenience method (which handles polling for us), the same kind of
-  // stale-type gap we hit with entry.publish's `locales` param. Cast past it rather than
-  // hand-roll polling against a method the live platform already supports.
-  const call = await (sdk.cma.appActionCall as any).createWithResult(
-    { appActionId: TRANSLATE_APP_ACTION_ID },
+  // The live platform only supports 'create' | 'getCallDetails' | 'createWithResponse' for
+  // appActionCall (confirmed by an actual "createWithResult is not a function" error) -
+  // createWithResponse triggers the App Action and waits for its response in one call, but
+  // returns the older webhook-style shape (statusCode/response.body as a JSON string, plus
+  // an errors array) rather than the newer structured {status, result, error}.
+  const call = await sdk.cma.appActionCall.createWithResponse(
+    // sdk.ids.app is always set for a sidebar location - it's just typed optional because
+    // not every location provides it.
+    { appActionId: TRANSLATE_APP_ACTION_ID, appDefinitionId: sdk.ids.app! },
     {
       parameters: {
         texts,
@@ -33,17 +61,23 @@ const callTranslateAction = async (
     }
   );
 
-  if (call.sys.status !== 'succeeded') {
-    const message =
-      call.sys.status === 'failed' ? call.sys.error?.message : 'Translation timed out or was cancelled';
-    throw new Error(message || 'Translation failed');
+  const succeeded = call.statusCode >= 200 && call.statusCode < 300 && (call.errors?.length ?? 0) === 0;
+  if (!succeeded) {
+    throw new Error(extractFailureMessage(call));
   }
 
-  const translations = call.sys.result?.translations;
+  let parsedBody: unknown;
+  try {
+    parsedBody = JSON.parse(call.response.body);
+  } catch {
+    throw new Error('Translation response was not valid JSON.');
+  }
+
+  const translations = (parsedBody as { translations?: unknown })?.translations;
   if (!Array.isArray(translations) || translations.length !== texts.length) {
     throw new Error('Translation returned an unexpected result shape');
   }
-  return translations;
+  return translations as string[];
 };
 
 // Translates every localized text-like field on the entry from config.source into

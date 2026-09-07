@@ -14,11 +14,18 @@ const makeField = (overrides: Record<string, unknown>) => ({
   ...overrides,
 });
 
+const okResponse = (translations: string[]) => ({
+  statusCode: 200,
+  errors: [],
+  response: { body: JSON.stringify({ translations }) },
+});
+
 const makeSdk = (fields: Record<string, ReturnType<typeof makeField>>, callResult: unknown) => ({
+  ids: { app: 'test-app' },
   entry: { fields, save: vi.fn().mockResolvedValue(undefined) },
   cma: {
     appActionCall: {
-      createWithResult: vi.fn().mockResolvedValue(callResult),
+      createWithResponse: vi.fn().mockResolvedValue(callResult),
     },
   },
 });
@@ -26,10 +33,7 @@ const makeSdk = (fields: Record<string, ReturnType<typeof makeField>>, callResul
 describe('translateEntryFields', () => {
   it('translates a Symbol field and writes the result into the target locale', async () => {
     const title = makeField({ getValue: vi.fn(() => 'Hello') });
-    const sdk = makeSdk(
-      { title },
-      { sys: { status: 'succeeded', result: { translations: ['Hola'] } } }
-    );
+    const sdk = makeSdk({ title }, okResponse(['Hola']));
 
     const outcome = await translateEntryFields(sdk as any, config);
 
@@ -40,7 +44,7 @@ describe('translateEntryFields', () => {
 
   it('skips fields missing the source or target locale', async () => {
     const usOnly = makeField({ locales: ['en-US'], getValue: vi.fn(() => 'Hello') });
-    const sdk = makeSdk({ usOnly }, { sys: { status: 'succeeded', result: { translations: [] } } });
+    const sdk = makeSdk({ usOnly }, okResponse([]));
 
     const outcome = await translateEntryFields(sdk as any, config);
 
@@ -51,7 +55,7 @@ describe('translateEntryFields', () => {
 
   it('skips a field whose source value is empty', async () => {
     const empty = makeField({ getValue: vi.fn(() => '') });
-    const sdk = makeSdk({ empty }, { sys: { status: 'succeeded', result: { translations: [] } } });
+    const sdk = makeSdk({ empty }, okResponse([]));
 
     const outcome = await translateEntryFields(sdk as any, config);
 
@@ -72,7 +76,7 @@ describe('translateEntryFields', () => {
       ],
     };
     const body = makeField({ type: 'RichText', getValue: vi.fn(() => document) });
-    const sdk = makeSdk({ body }, { sys: { status: 'succeeded', result: { translations: ['Hola'] } } });
+    const sdk = makeSdk({ body }, okResponse(['Hola']));
 
     await translateEntryFields(sdk as any, config);
 
@@ -85,7 +89,11 @@ describe('translateEntryFields', () => {
     const title = makeField({ getValue: vi.fn(() => 'Hello') });
     const sdk = makeSdk(
       { title },
-      { sys: { status: 'failed', error: { message: 'OpenAI key missing' } } }
+      {
+        statusCode: 500,
+        errors: [{ message: 'OpenAI key missing' }],
+        response: { body: '' },
+      }
     );
 
     await expect(translateEntryFields(sdk as any, config)).rejects.toThrow('OpenAI key missing');
@@ -93,7 +101,7 @@ describe('translateEntryFields', () => {
 
   it('throws when the App Action returns a mismatched-length result', async () => {
     const title = makeField({ getValue: vi.fn(() => 'Hello') });
-    const sdk = makeSdk({ title }, { sys: { status: 'succeeded', result: { translations: [] } } });
+    const sdk = makeSdk({ title }, okResponse([]));
 
     await expect(translateEntryFields(sdk as any, config)).rejects.toThrow(
       'unexpected result shape'

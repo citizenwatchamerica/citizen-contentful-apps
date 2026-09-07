@@ -11,7 +11,7 @@ vi.mock('@contentful/react-apps-toolkit', () => ({
 describe('Sidebar component', () => {
   beforeEach(() => {
     mockSdk.entry.fields = {};
-    mockSdk.cma.appActionCall.createWithResult.mockReset();
+    mockSdk.cma.appActionCall.createWithResponse.mockReset();
   });
 
   afterEach(cleanup);
@@ -41,8 +41,10 @@ describe('Sidebar component', () => {
         setValue: vi.fn().mockResolvedValue(undefined),
       },
     };
-    mockSdk.cma.appActionCall.createWithResult.mockResolvedValue({
-      sys: { status: 'succeeded', result: { translations: ['Hola'] } },
+    mockSdk.cma.appActionCall.createWithResponse.mockResolvedValue({
+      statusCode: 200,
+      errors: [],
+      response: { body: JSON.stringify({ translations: ['Hola'] }) },
     });
 
     const { getByText, getByRole } = render(<Sidebar />);
@@ -72,8 +74,10 @@ describe('Sidebar component', () => {
         setValue: vi.fn().mockResolvedValue(undefined),
       },
     };
-    mockSdk.cma.appActionCall.createWithResult.mockResolvedValue({
-      sys: { status: 'failed', error: { message: 'OpenAI key missing' } },
+    mockSdk.cma.appActionCall.createWithResponse.mockResolvedValue({
+      statusCode: 500,
+      errors: [{ message: 'OpenAI key missing' }],
+      response: { body: '' },
     });
 
     const { getByText, getByRole } = render(<Sidebar />);
