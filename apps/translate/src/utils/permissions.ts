@@ -29,9 +29,13 @@ export interface SpaceMembership {
   roles: Array<{ name: string }>;
 }
 
-// Unlike Regional Publishing, admins don't get an implicit "everything" here - a
-// translation direction (source -> target) is inherently role/region specific, so an
-// admin with no matching role config simply isn't configured for translation either.
+const ADMIN_FALLBACK_ROLE = 'Author (Global)';
+
+// Unlike Regional Publishing, there's no single "everything" translation direction, so an
+// admin doesn't get every locale the way they get every publish target. But Contentful
+// reports an empty `roles` array for space admins regardless of any role also assigned to
+// them, so without a fallback they'd always show as unconfigured even when a sensible
+// default (Author (Global)'s pair) exists. Fall back to that role's config for admins only.
 export const getTranslationConfig = (
   spaceMembership: SpaceMembership,
   parameters: AppInstallationParameters | null
@@ -42,6 +46,13 @@ export const getTranslationConfig = (
     const config = roleTranslationMap[role.name];
     if (config?.source && config?.target) {
       return config;
+    }
+  }
+
+  if (spaceMembership.admin) {
+    const fallback = roleTranslationMap[ADMIN_FALLBACK_ROLE];
+    if (fallback?.source && fallback?.target) {
+      return fallback;
     }
   }
 

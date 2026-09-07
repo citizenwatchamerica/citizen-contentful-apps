@@ -20,6 +20,24 @@ describe('getTranslationConfig', () => {
     expect(config).toBeNull();
   });
 
+  it('falls back to Author (Global) for a space admin, since Contentful reports admins with an empty roles array', () => {
+    const config = getTranslationConfig(
+      { admin: true, roles: [] },
+      { roleTranslationMap: JSON.stringify({ 'Author (Global)': { source: 'en-US', target: 'es-US', guidance: '' } }) }
+    );
+
+    expect(config).toEqual({ source: 'en-US', target: 'es-US', guidance: '' });
+  });
+
+  it('does not apply the admin fallback for a non-admin with no matching role', () => {
+    const config = getTranslationConfig(
+      { admin: false, roles: [] },
+      { roleTranslationMap: JSON.stringify({ 'Author (Global)': { source: 'en-US', target: 'es-US', guidance: '' } }) }
+    );
+
+    expect(config).toBeNull();
+  });
+
   it('returns null when source or target is blank', () => {
     const config = getTranslationConfig(
       { admin: false, roles: [{ name: 'Merchants (UK)' }] },
