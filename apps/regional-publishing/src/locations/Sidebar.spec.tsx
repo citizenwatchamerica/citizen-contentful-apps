@@ -1,5 +1,5 @@
-import { fireEvent, render } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { cleanup, fireEvent, render, waitFor } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mockSdk } from '../../test/mocks';
 import Sidebar from './Sidebar';
 
@@ -9,6 +9,13 @@ vi.mock('@contentful/react-apps-toolkit', () => ({
 }));
 
 describe('Sidebar component', () => {
+  beforeEach(() => {
+    mockSdk.dialogs.openCurrentApp.mockReset();
+    mockSdk.cma.entry.publish.mockClear();
+  });
+
+  afterEach(cleanup);
+
   it('shows a warning when the user has no allowed locales', () => {
     mockSdk.user.spaceMembership = { admin: false, roles: [] };
     mockSdk.parameters.installation = { roleLocaleMap: {} };
@@ -17,7 +24,7 @@ describe('Sidebar component', () => {
     expect(getByText(/isn't configured to publish any locales/)).toBeTruthy();
   });
 
-  it('lists allowed and excluded locales for a scoped role, all selected by default', () => {
+  it('lists allowed and excluded locales for a scoped role', () => {
     mockSdk.user.spaceMembership = {
       admin: false,
       roles: [{ name: 'US Editor' }],
@@ -27,25 +34,36 @@ describe('Sidebar component', () => {
     const { getByText } = render(<Sidebar />);
     expect(getByText("You're responsible for: en-US")).toBeTruthy();
     expect(getByText('Not affected by this publish: en-GB')).toBeTruthy();
-    expect(getByText('Publish all my regions (1)')).toBeTruthy();
   });
 
-  it('defaults to every locale selected for an admin', () => {
-    mockSdk.user.spaceMembership = { admin: true, roles: [] };
-    mockSdk.parameters.installation = { roleLocaleMap: {} };
+  it('opens the review dialog with the allowed and excluded locales, then publishes what the dialog returns', async () => {
+    mockSdk.user.spaceMembership = { admin: false, roles: [{ name: 'US Editor' }] };
+    mockSdk.parameters.installation = { roleLocaleMap: { 'US Editor': ['en-US'] } };
+    mockSdk.dialogs.openCurrentApp.mockResolvedValue(['en-US']);
 
     const { getByText } = render(<Sidebar />);
-    expect(getByText("You're responsible for: en-US, en-GB")).toBeTruthy();
-    expect(getByText('Publish all my regions (2)')).toBeTruthy();
+    fireEvent.click(getByText('Publish'));
+
+    await waitFor(() => expect(mockSdk.dialogs.openCurrentApp).toHaveBeenCalledTimes(1));
+    expect(mockSdk.dialogs.openCurrentApp).toHaveBeenCalledWith(
+      expect.objectContaining({
+        parameters: { allowedLocales: ['en-US'], excludedLocales: ['en-GB'] },
+      })
+    );
+
+    await waitFor(() => expect(getByText('Published en-US.')).toBeTruthy());
   });
 
-  it('narrows the publish button to just the regions the user unchecks down to', () => {
+  it('does nothing when the dialog is cancelled', async () => {
     mockSdk.user.spaceMembership = { admin: true, roles: [] };
     mockSdk.parameters.installation = { roleLocaleMap: {} };
+    mockSdk.dialogs.openCurrentApp.mockResolvedValue(null);
 
-    const { getByText, container } = render(<Sidebar />);
-    fireEvent.click(container.querySelector('#publish-en-GB')!);
+    const { getByText, queryByText } = render(<Sidebar />);
+    fireEvent.click(getByText('Publish'));
 
-    expect(getByText('Publish selected regions (1)')).toBeTruthy();
+    await waitFor(() => expect(mockSdk.dialogs.openCurrentApp).toHaveBeenCalledTimes(1));
+    expect(mockSdk.cma.entry.publish).not.toHaveBeenCalled();
+    expect(queryByText(/Published/)).toBeNull();
   });
 });

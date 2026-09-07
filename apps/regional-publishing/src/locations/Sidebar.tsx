@@ -1,7 +1,7 @@
 import { SidebarAppSDK } from '@contentful/app-sdk';
-import { Button, Checkbox, Flex, Note, Paragraph, Subheading, TextLink } from '@contentful/f36-components';
+import { Button, Flex, Note, Paragraph, Subheading } from '@contentful/f36-components';
 import { useAutoResizer, useSDK } from '@contentful/react-apps-toolkit';
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { AppInstallationParameters, getAllowedLocales } from '../utils/permissions';
 import { publishLocales } from '../utils/publishLocales';
 
@@ -24,20 +24,20 @@ const Sidebar = () => {
 
   const excludedLocales = spaceLocales.filter(locale => !allowedLocales.includes(locale));
 
-  // Defaults to every locale the user is responsible for; unchecking narrows the publish.
-  const [selectedLocales, setSelectedLocales] = useState<string[]>(allowedLocales);
-
-  useEffect(() => {
-    setSelectedLocales(allowedLocales);
-  }, [allowedLocales]);
-
-  const toggleLocale = (locale: string, checked: boolean) => {
-    setSelectedLocales(prev => (checked ? [...prev, locale] : prev.filter(l => l !== locale)));
-  };
-
-  const allSelected = selectedLocales.length === allowedLocales.length;
-
   const handlePublish = async () => {
+    // Mirrors the native Publish button's review step: the user sees exactly which of
+    // their regions are about to go out and can narrow the selection before confirming.
+    const selectedLocales = await sdk.dialogs.openCurrentApp({
+      title: 'Publish regions',
+      width: 'small',
+      minHeight: 250,
+      parameters: { allowedLocales, excludedLocales },
+    });
+
+    if (!selectedLocales || selectedLocales.length === 0) {
+      return;
+    }
+
     setStatus('publishing');
     try {
       const { version } = sdk.entry.getSys();
@@ -62,37 +62,16 @@ const Sidebar = () => {
     <Flex flexDirection="column" gap="spacingM">
       <Subheading>Regional Publishing</Subheading>
       <Paragraph>You're responsible for: {allowedLocales.join(', ')}</Paragraph>
-
-      <Flex flexDirection="column" gap="spacingXs">
-        {allowedLocales.map(locale => (
-          <Checkbox
-            key={locale}
-            id={`publish-${locale}`}
-            isChecked={selectedLocales.includes(locale)}
-            onChange={e => toggleLocale(locale, (e.target as HTMLInputElement).checked)}
-          >
-            {locale}
-          </Checkbox>
-        ))}
-      </Flex>
-
-      <TextLink as="button" onClick={() => setSelectedLocales(allSelected ? [] : allowedLocales)}>
-        {allSelected ? 'Select none' : 'Select all'}
-      </TextLink>
-
       {excludedLocales.length > 0 && (
         <Note variant="neutral">Not affected by this publish: {excludedLocales.join(', ')}</Note>
       )}
-
       <Button
         variant="positive"
-        isDisabled={status === 'publishing' || selectedLocales.length === 0}
+        isDisabled={status === 'publishing'}
         isLoading={status === 'publishing'}
         onClick={handlePublish}
       >
-        {allSelected
-          ? `Publish all my regions (${selectedLocales.length})`
-          : `Publish selected regions (${selectedLocales.length})`}
+        Publish
       </Button>
       {status === 'success' && <Note variant="positive">Published {publishedLocales.join(', ')}.</Note>}
       {status === 'error' && <Note variant="negative">Publish failed. Please try again.</Note>}

@@ -28,6 +28,9 @@ const mockSdk: any = {
   entry: {
     getSys: vi.fn().mockReturnValue({ version: 1 }),
   },
+  dialogs: {
+    openCurrentApp: vi.fn(),
+  },
   window: {
     startAutoResizer: vi.fn(),
   },
