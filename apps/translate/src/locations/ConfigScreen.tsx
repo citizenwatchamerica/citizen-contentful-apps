@@ -41,6 +41,12 @@ const DEFAULT_TRANSLATION_CONFIG: Record<string, TranslationConfig> = {
     guidance:
       'Localize into British English spelling, vocabulary, and idiom (e.g. "colour" not "color", "trainers" not "sneakers") while preserving the original meaning and tone.',
   },
+  'Author (Global)': {
+    source: 'en-US',
+    target: 'es-US',
+    guidance:
+      'Translate into neutral U.S. Hispanic/Latin American Spanish for American Spanish-speaking customers. Do not use Spanglish, code-switching, or untranslated English loanwords where a standard Spanish term exists. Avoid Spain-specific (Peninsular) vocabulary and verb forms (e.g. no "vosotros").',
+  },
 };
 
 const EMPTY_CONFIG: TranslationConfig = { source: '', target: '', guidance: '' };
