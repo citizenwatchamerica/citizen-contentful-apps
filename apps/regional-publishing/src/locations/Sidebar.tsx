@@ -1,7 +1,8 @@
 import { SidebarAppSDK } from '@contentful/app-sdk';
-import { Button, Flex, Note, Subheading } from '@contentful/f36-components';
+import { Button, EntityStatusBadge, Flex, Note, Subheading } from '@contentful/f36-components';
 import { useAutoResizer, useSDK } from '@contentful/react-apps-toolkit';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { getEntryStatus } from '../utils/entryStatus';
 import { getLocaleStatuses } from '../utils/localeStatus';
 import { AppInstallationParameters, getAllowedLocales } from '../utils/permissions';
 import { publishLocales } from '../utils/publishLocales';
@@ -44,6 +45,13 @@ const Sidebar = () => {
   const [status, setStatus] = useState<Status>('idle');
   const [publishedLocales, setPublishedLocales] = useState<string[]>([]);
   const [errorMessage, setErrorMessage] = useState('');
+  const [entryStatus, setEntryStatus] = useState(() => getEntryStatus(sdk.entry.getSys()));
+
+  useEffect(() => {
+    // Keeps the badge live - most importantly, flips straight to "published" right after this
+    // app's own Publish button succeeds, with no page refresh needed.
+    return sdk.entry.onSysChanged(sys => setEntryStatus(getEntryStatus(sys)));
+  }, [sdk]);
 
   const parameters = sdk.parameters.installation as AppInstallationParameters;
   const spaceLocales = sdk.locales.available;
@@ -99,7 +107,10 @@ const Sidebar = () => {
 
   return (
     <Flex flexDirection="column" gap="spacingM">
-      <Subheading>Regional Publishing</Subheading>
+      <Flex justifyContent="space-between" alignItems="center">
+        <Subheading marginBottom="none">Regional Publishing</Subheading>
+        <EntityStatusBadge entityStatus={entryStatus} />
+      </Flex>
       <Button
         variant="positive"
         isFullWidth

@@ -12,6 +12,8 @@ describe('Sidebar component', () => {
   beforeEach(() => {
     mockSdk.dialogs.openCurrentApp.mockReset();
     mockSdk.cma.entry.publish.mockClear();
+    mockSdk.entry.getSys.mockReturnValue({ version: 1 });
+    mockSdk.entry.onSysChanged.mockReturnValue(() => {});
   });
 
   afterEach(cleanup);

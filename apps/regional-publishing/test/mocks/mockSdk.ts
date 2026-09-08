@@ -28,6 +28,7 @@ const mockSdk: any = {
   },
   entry: {
     getSys: vi.fn().mockReturnValue({ version: 1 }),
+    onSysChanged: vi.fn().mockReturnValue(() => {}),
   },
   dialogs: {
     openCurrentApp: vi.fn(),
