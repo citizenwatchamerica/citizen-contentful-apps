@@ -14,8 +14,13 @@ const mockSdk: any = {
     entry: 'test-entry',
   },
   locales: {
-    available: ['en-US', 'es-US'],
-    names: { 'en-US': 'English (United States)', 'es-US': 'Spanish (United States)' },
+    available: ['en-US', 'es-US', 'en-CA', 'fr-CA'],
+    names: {
+      'en-US': 'English (United States)',
+      'es-US': 'Spanish (United States)',
+      'en-CA': 'English (Canada)',
+      'fr-CA': 'French (Canada)',
+    },
   },
   user: {
     spaceMembership: {

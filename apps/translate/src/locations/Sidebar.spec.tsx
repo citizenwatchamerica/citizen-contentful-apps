@@ -57,6 +57,47 @@ describe('Sidebar component', () => {
     );
   });
 
+  it('shows a rule picker when a role has more than one configured, and translates using the selected one', async () => {
+    mockSdk.user.spaceMembership = { admin: false, roles: [{ name: 'Merchants (CA)' }] };
+    mockSdk.parameters.installation = {
+      roleTranslationMap: JSON.stringify({
+        'Merchants (CA)': [
+          { source: 'en-CA', target: 'fr-CA', guidance: 'quebec french' },
+          { source: 'en-US', target: 'en-CA', guidance: 'canadian english' },
+        ],
+      }),
+    };
+    mockSdk.entry.fields = {
+      title: {
+        id: 'title',
+        name: 'Title',
+        type: 'Symbol',
+        locales: ['en-US', 'en-CA', 'fr-CA'],
+        getValue: vi.fn(() => 'Hello'),
+        setValue: vi.fn().mockResolvedValue(undefined),
+      },
+    };
+    mockSdk.cma.appActionCall.createWithResponse.mockResolvedValue({
+      statusCode: 200,
+      errors: [],
+      response: { body: JSON.stringify({ translations: ['Hello'] }) },
+    });
+
+    const { getByText, getByRole, container } = render(<Sidebar />);
+
+    const select = container.querySelector('select')!;
+    expect(select).toBeTruthy();
+    fireEvent.change(select, { target: { value: '1' } });
+
+    fireEvent.click(getByRole('button', { name: 'Translate' }));
+
+    await waitFor(() =>
+      expect(
+        getByText('Translated 1 field from English (United States) to English (Canada).')
+      ).toBeTruthy()
+    );
+  });
+
   it('shows the real error message when translation fails', async () => {
     mockSdk.user.spaceMembership = { admin: false, roles: [{ name: 'Merchants (US)' }] };
     mockSdk.parameters.installation = {

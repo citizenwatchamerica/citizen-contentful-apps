@@ -1,10 +1,10 @@
 import { SidebarAppSDK } from '@contentful/app-sdk';
-import { Button, Flex, Note, Subheading } from '@contentful/f36-components';
+import { Button, Flex, Note, Select, Subheading } from '@contentful/f36-components';
 import tokens from '@contentful/f36-tokens';
 import { useAutoResizer, useSDK } from '@contentful/react-apps-toolkit';
 import { css } from 'emotion';
 import { useMemo, useState } from 'react';
-import { AppInstallationParameters, getTranslationConfig } from '../utils/permissions';
+import { AppInstallationParameters, getTranslationConfigs } from '../utils/permissions';
 import { FieldTranslationOutcome, translateEntryFields } from '../utils/translateFields';
 
 type Status = 'idle' | 'translating' | 'success' | 'error';
@@ -60,13 +60,18 @@ const Sidebar = () => {
   const [status, setStatus] = useState<Status>('idle');
   const [translatedFields, setTranslatedFields] = useState<FieldTranslationOutcome[]>([]);
   const [errorMessage, setErrorMessage] = useState('');
+  const [selectedIndex, setSelectedIndex] = useState(0);
 
   const parameters = sdk.parameters.installation as AppInstallationParameters;
 
-  const config = useMemo(
-    () => getTranslationConfig(sdk.user.spaceMembership, parameters),
+  const configs = useMemo(
+    () => getTranslationConfigs(sdk.user.spaceMembership, parameters),
     [sdk.user.spaceMembership, parameters]
   );
+
+  const config = configs[selectedIndex];
+
+  const localeName = (locale: string) => sdk.locales.names[locale] ?? locale;
 
   const handleTranslate = async () => {
     if (!config) return;
@@ -82,7 +87,7 @@ const Sidebar = () => {
     }
   };
 
-  if (!config) {
+  if (configs.length === 0) {
     return (
       <Note variant="warning">
         Your role isn't configured for translation. Contact an admin to update the Translate app
@@ -91,12 +96,24 @@ const Sidebar = () => {
     );
   }
 
-  const sourceName = sdk.locales.names[config.source] ?? config.source;
-  const targetName = sdk.locales.names[config.target] ?? config.target;
-
   return (
     <Flex flexDirection="column" gap="spacingM">
       <Subheading>Translate</Subheading>
+      {configs.length > 1 && (
+        <Select
+          value={String(selectedIndex)}
+          onChange={e => {
+            setSelectedIndex(Number(e.target.value));
+            setStatus('idle');
+          }}
+        >
+          {configs.map((c, index) => (
+            <Select.Option key={index} value={String(index)}>
+              {localeName(c.source)} → {localeName(c.target)}
+            </Select.Option>
+          ))}
+        </Select>
+      )}
       <Button
         variant="primary"
         className={orangeButtonStyles}
@@ -111,10 +128,12 @@ const Sidebar = () => {
         (translatedFields.length > 0 ? (
           <Note variant="positive">
             Translated {translatedFields.length} field{translatedFields.length === 1 ? '' : 's'} from{' '}
-            {sourceName} to {targetName}.
+            {localeName(config.source)} to {localeName(config.target)}.
           </Note>
         ) : (
-          <Note variant="neutral">Nothing to translate — {sourceName} had no text to copy over.</Note>
+          <Note variant="neutral">
+            Nothing to translate — {localeName(config.source)} had no text to copy over.
+          </Note>
         ))}
       {status === 'error' && <Note variant="negative">Translation failed: {errorMessage}</Note>}
     </Flex>
