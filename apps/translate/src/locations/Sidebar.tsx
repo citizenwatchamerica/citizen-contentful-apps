@@ -98,7 +98,7 @@ const Sidebar = () => {
 
   return (
     <Flex flexDirection="column" gap="spacingM">
-      <Subheading>Translate</Subheading>
+      <Subheading marginBottom="none">Translate</Subheading>
       {configs.length > 1 && (
         <Select
           value={String(selectedIndex)}
