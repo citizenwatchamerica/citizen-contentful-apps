@@ -8,6 +8,7 @@ import {
   Subheading,
   Text,
   TextInput,
+  TextLink,
 } from '@contentful/f36-components';
 import { useAutoResizer, useSDK } from '@contentful/react-apps-toolkit';
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -25,40 +26,77 @@ import {
 
 type Status = 'idle' | 'publishing' | 'success' | 'error';
 
+interface ExtractedError {
+  message: string;
+  // Only populated when Contentful reports more than one field/locale issue at once - a single
+  // issue is folded straight into `message` instead, so simple errors stay a one-liner.
+  details: string[];
+}
+
 // contentful-management normally wraps API errors as an Error whose `.message` is the raw
 // JSON response body, but calls proxied through the app iframe's postMessage bridge (as
 // sdk.cma is) can arrive as a plain object instead of a real Error instance - handle both,
 // and pull the human-readable `message` field out of any JSON we find along the way.
-const extractErrorMessage = (err: unknown): string => {
-  if (typeof err === 'string') return err;
+const extractErrorMessage = (err: unknown): ExtractedError => {
+  if (typeof err === 'string') return { message: err, details: [] };
 
   const rawMessage = err instanceof Error ? err.message : (err as { message?: unknown })?.message;
 
   if (typeof rawMessage === 'string') {
     try {
       const parsed = JSON.parse(rawMessage);
-      if (typeof parsed?.message !== 'string') return rawMessage;
+      if (typeof parsed?.message !== 'string') return { message: rawMessage, details: [] };
 
       // Contentful's top-level message is a generic label ("Validation error") - the actual
-      // reason lives in details.errors[], e.g. { details: 'The property "columns" is required here' }.
-      const detailErrors = Array.isArray(parsed?.details?.errors)
-        ? parsed.details.errors.map((e: { details?: string }) => e?.details).filter(Boolean).join('; ')
-        : '';
-      return detailErrors ? `${parsed.message}: ${detailErrors}` : parsed.message;
+      // reason(s) live in details.errors[], e.g. { details: 'The property "columns" is required here' }.
+      const detailErrors: string[] = Array.isArray(parsed?.details?.errors)
+        ? parsed.details.errors.map((e: { details?: string }) => e?.details).filter(Boolean)
+        : [];
+
+      if (detailErrors.length === 0) return { message: parsed.message, details: [] };
+      if (detailErrors.length === 1) return { message: `${parsed.message}: ${detailErrors[0]}`, details: [] };
+      return { message: parsed.message, details: detailErrors };
     } catch {
-      return rawMessage;
+      return { message: rawMessage, details: [] };
     }
   }
 
   if (err && typeof err === 'object') {
     try {
-      return JSON.stringify(err);
+      return { message: JSON.stringify(err), details: [] };
     } catch {
       // fall through
     }
   }
 
-  return 'Unknown error';
+  return { message: 'Unknown error', details: [] };
+};
+
+const ErrorNote = ({ prefix, error }: { prefix: string; error: ExtractedError }) => {
+  const [showDetails, setShowDetails] = useState(false);
+
+  return (
+    <Note variant="negative">
+      {prefix}: {error.message}
+      {error.details.length > 0 && (
+        <>
+          {' '}
+          <TextLink as="button" onClick={() => setShowDetails(v => !v)}>
+            {showDetails ? 'Hide details' : 'Show details'}
+          </TextLink>
+          {showDetails && (
+            <ul>
+              {error.details.map((detail, index) => (
+                <li key={index}>
+                  <Text fontSize="fontSizeS">{detail}</Text>
+                </li>
+              ))}
+            </ul>
+          )}
+        </>
+      )}
+    </Note>
+  );
 };
 
 const Sidebar = () => {
@@ -67,7 +105,7 @@ const Sidebar = () => {
 
   const [status, setStatus] = useState<Status>('idle');
   const [publishedLocales, setPublishedLocales] = useState<string[]>([]);
-  const [errorMessage, setErrorMessage] = useState('');
+  const [publishError, setPublishError] = useState<ExtractedError | null>(null);
   const [entryStatus, setEntryStatus] = useState(() => getEntryStatus(sdk.entry.getSys()));
 
   useEffect(() => {
@@ -79,7 +117,7 @@ const Sidebar = () => {
   const [scheduledActions, setScheduledActions] = useState<ScheduledEntryAction[]>([]);
   const [scheduleAction, setScheduleAction] = useState<ScheduledActionType>('publish');
   const [scheduleInput, setScheduleInput] = useState('');
-  const [scheduleError, setScheduleError] = useState('');
+  const [scheduleError, setScheduleError] = useState<ExtractedError | null>(null);
   const [isScheduling, setIsScheduling] = useState(false);
 
   const refreshScheduledActions = useCallback(async () => {
@@ -99,7 +137,7 @@ const Sidebar = () => {
     if (!scheduleInput) return;
 
     setIsScheduling(true);
-    setScheduleError('');
+    setScheduleError(null);
     try {
       const datetime = new Date(scheduleInput).toISOString();
       const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -114,7 +152,7 @@ const Sidebar = () => {
   };
 
   const handleCancelScheduledAction = async (scheduledActionId: string) => {
-    setScheduleError('');
+    setScheduleError(null);
     try {
       await cancelScheduledAction(sdk.cma, sdk.ids.environment, scheduledActionId);
       await refreshScheduledActions();
@@ -161,7 +199,7 @@ const Sidebar = () => {
       setPublishedLocales(selectedLocales);
       setStatus('success');
     } catch (err) {
-      setErrorMessage(extractErrorMessage(err));
+      setPublishError(extractErrorMessage(err));
       setStatus('error');
     }
   };
@@ -191,7 +229,7 @@ const Sidebar = () => {
         Publish
       </Button>
       {status === 'success' && <Note variant="positive">Published {publishedLocales.join(', ')}.</Note>}
-      {status === 'error' && <Note variant="negative">Publish failed: {errorMessage}</Note>}
+      {status === 'error' && publishError && <ErrorNote prefix="Publish failed" error={publishError} />}
 
       <Flex flexDirection="column" gap="spacingXs">
         <Text fontWeight="fontWeightDemiBold">Scheduled actions</Text>
@@ -233,7 +271,7 @@ const Sidebar = () => {
             Schedule
           </Button>
         </Flex>
-        {scheduleError && <Note variant="negative">{scheduleError}</Note>}
+        {scheduleError && <ErrorNote prefix="Schedule failed" error={scheduleError} />}
       </Flex>
     </Flex>
   );

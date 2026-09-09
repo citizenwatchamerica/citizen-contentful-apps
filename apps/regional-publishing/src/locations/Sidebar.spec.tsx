@@ -112,6 +112,38 @@ describe('Sidebar component', () => {
     );
   });
 
+  it('offers an expandable details view when Contentful reports more than one validation issue', async () => {
+    mockSdk.user.spaceMembership = { admin: true, roles: [] };
+    mockSdk.parameters.installation = { roleLocaleMap: {} };
+    mockSdk.dialogs.openCurrentApp.mockResolvedValue(['en-US']);
+    mockSdk.cma.entry.publish.mockRejectedValueOnce(
+      new Error(
+        JSON.stringify({
+          message: 'Validation error',
+          details: {
+            errors: [
+              { details: 'The property "columns" is required here' },
+              { details: 'The property "fr-CA" is required here' },
+            ],
+          },
+        })
+      )
+    );
+
+    const { getByText, getByRole, queryByText } = render(<Sidebar />);
+    fireEvent.click(getByRole('button', { name: 'Publish' }));
+
+    await waitFor(() => expect(getByText('Publish failed: Validation error')).toBeTruthy());
+    expect(queryByText('The property "columns" is required here')).toBeNull();
+
+    fireEvent.click(getByText('Show details'));
+    expect(getByText('The property "columns" is required here')).toBeTruthy();
+    expect(getByText('The property "fr-CA" is required here')).toBeTruthy();
+
+    fireEvent.click(getByText('Hide details'));
+    expect(queryByText('The property "columns" is required here')).toBeNull();
+  });
+
   it('does nothing when the dialog is cancelled', async () => {
     mockSdk.user.spaceMembership = { admin: true, roles: [] };
     mockSdk.parameters.installation = { roleLocaleMap: {} };

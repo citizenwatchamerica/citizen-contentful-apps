@@ -1,5 +1,5 @@
 import { SidebarAppSDK } from '@contentful/app-sdk';
-import { Button, Flex, Note, Select, Subheading } from '@contentful/f36-components';
+import { Button, Flex, Note, Select, Subheading, Text, TextLink } from '@contentful/f36-components';
 import tokens from '@contentful/f36-tokens';
 import { useAutoResizer, useSDK } from '@contentful/react-apps-toolkit';
 import { css } from 'emotion';
@@ -8,6 +8,13 @@ import { AppInstallationParameters, getTranslationConfigs } from '../utils/permi
 import { FieldTranslationOutcome, translateEntryFields } from '../utils/translateFields';
 
 type Status = 'idle' | 'translating' | 'success' | 'error';
+
+interface ExtractedError {
+  message: string;
+  // Only populated when Contentful reports more than one field/locale issue at once - a single
+  // issue is folded straight into `message` instead, so simple errors stay a one-liner.
+  details: string[];
+}
 
 // Forma36's Button has no built-in orange variant (blue/green/red only) - orange reads as
 // "this is an interstitial/in-progress step", distinct from Regional Publishing's green
@@ -28,36 +35,66 @@ const orangeButtonStyles = css({
 // Mirrors the same non-Error rejection shape handling as the Regional Publishing app -
 // sdk.cma calls are proxied through the app iframe's postMessage bridge, which can reject
 // with a plain object instead of a real Error instance.
-const extractErrorMessage = (err: unknown): string => {
-  if (typeof err === 'string') return err;
+const extractErrorMessage = (err: unknown): ExtractedError => {
+  if (typeof err === 'string') return { message: err, details: [] };
 
   const rawMessage = err instanceof Error ? err.message : (err as { message?: unknown })?.message;
 
   if (typeof rawMessage === 'string') {
     try {
       const parsed = JSON.parse(rawMessage);
-      if (typeof parsed?.message !== 'string') return rawMessage;
+      if (typeof parsed?.message !== 'string') return { message: rawMessage, details: [] };
 
       // Contentful's top-level message is a generic label ("Validation error") - the actual
-      // reason lives in details.errors[], e.g. { details: 'The property "columns" is required here' }.
-      const detailErrors = Array.isArray(parsed?.details?.errors)
-        ? parsed.details.errors.map((e: { details?: string }) => e?.details).filter(Boolean).join('; ')
-        : '';
-      return detailErrors ? `${parsed.message}: ${detailErrors}` : parsed.message;
+      // reason(s) live in details.errors[], e.g. { details: 'The property "columns" is required here' }.
+      const detailErrors: string[] = Array.isArray(parsed?.details?.errors)
+        ? parsed.details.errors.map((e: { details?: string }) => e?.details).filter(Boolean)
+        : [];
+
+      if (detailErrors.length === 0) return { message: parsed.message, details: [] };
+      if (detailErrors.length === 1) return { message: `${parsed.message}: ${detailErrors[0]}`, details: [] };
+      return { message: parsed.message, details: detailErrors };
     } catch {
-      return rawMessage;
+      return { message: rawMessage, details: [] };
     }
   }
 
   if (err && typeof err === 'object') {
     try {
-      return JSON.stringify(err);
+      return { message: JSON.stringify(err), details: [] };
     } catch {
       // fall through
     }
   }
 
-  return 'Unknown error';
+  return { message: 'Unknown error', details: [] };
+};
+
+const ErrorNote = ({ prefix, error }: { prefix: string; error: ExtractedError }) => {
+  const [showDetails, setShowDetails] = useState(false);
+
+  return (
+    <Note variant="negative">
+      {prefix}: {error.message}
+      {error.details.length > 0 && (
+        <>
+          {' '}
+          <TextLink as="button" onClick={() => setShowDetails(v => !v)}>
+            {showDetails ? 'Hide details' : 'Show details'}
+          </TextLink>
+          {showDetails && (
+            <ul>
+              {error.details.map((detail, index) => (
+                <li key={index}>
+                  <Text fontSize="fontSizeS">{detail}</Text>
+                </li>
+              ))}
+            </ul>
+          )}
+        </>
+      )}
+    </Note>
+  );
 };
 
 const Sidebar = () => {
@@ -66,7 +103,7 @@ const Sidebar = () => {
 
   const [status, setStatus] = useState<Status>('idle');
   const [translatedFields, setTranslatedFields] = useState<FieldTranslationOutcome[]>([]);
-  const [errorMessage, setErrorMessage] = useState('');
+  const [translateError, setTranslateError] = useState<ExtractedError | null>(null);
   const [selectedIndex, setSelectedIndex] = useState(0);
 
   const parameters = sdk.parameters.installation as AppInstallationParameters;
@@ -89,7 +126,7 @@ const Sidebar = () => {
       setTranslatedFields(outcome);
       setStatus('success');
     } catch (err) {
-      setErrorMessage(extractErrorMessage(err));
+      setTranslateError(extractErrorMessage(err));
       setStatus('error');
     }
   };
@@ -142,7 +179,7 @@ const Sidebar = () => {
             Nothing to translate — {localeName(config.source)} had no text to copy over.
           </Note>
         ))}
-      {status === 'error' && <Note variant="negative">Translation failed: {errorMessage}</Note>}
+      {status === 'error' && translateError && <ErrorNote prefix="Translation failed" error={translateError} />}
     </Flex>
   );
 };
