@@ -67,7 +67,7 @@ const CategorySearchResult = (props: SearchResultProps) => {
                 |
               </Box>
               <Box as="span" css={categoryStyle}>
-                Catalog: {result.name?.default || result.catalogId}
+                Catalog: {result.catalogId}
               </Box>
             </Text>
           </Flex>
