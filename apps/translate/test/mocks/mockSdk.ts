@@ -35,6 +35,9 @@ const mockSdk: any = {
     fields: {},
     save: vi.fn().mockResolvedValue(undefined),
   },
+  dialogs: {
+    openConfirm: vi.fn().mockResolvedValue(true),
+  },
   window: {
     startAutoResizer: vi.fn(),
   },

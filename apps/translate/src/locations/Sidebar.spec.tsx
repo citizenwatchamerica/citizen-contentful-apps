@@ -12,6 +12,7 @@ describe('Sidebar component', () => {
   beforeEach(() => {
     mockSdk.entry.fields = {};
     mockSdk.cma.appActionCall.createWithResponse.mockReset();
+    mockSdk.dialogs.openConfirm.mockReset().mockResolvedValue(true);
   });
 
   afterEach(cleanup);
@@ -125,5 +126,69 @@ describe('Sidebar component', () => {
     fireEvent.click(getByRole('button', { name: 'Translate' }));
 
     await waitFor(() => expect(getByText('Translation failed: OpenAI key missing')).toBeTruthy());
+  });
+
+  it('asks for confirmation naming the exact source and target locales before translating', async () => {
+    mockSdk.user.spaceMembership = { admin: false, roles: [{ name: 'Merchants (US)' }] };
+    mockSdk.parameters.installation = {
+      roleTranslationMap: JSON.stringify({
+        'Merchants (US)': { source: 'en-US', target: 'es-US', guidance: '' },
+      }),
+    };
+    mockSdk.entry.fields = {
+      title: {
+        id: 'title',
+        name: 'Title',
+        type: 'Symbol',
+        locales: ['en-US', 'es-US'],
+        getValue: vi.fn(() => 'Hello'),
+        setValue: vi.fn().mockResolvedValue(undefined),
+      },
+    };
+    mockSdk.cma.appActionCall.createWithResponse.mockResolvedValue({
+      statusCode: 200,
+      errors: [],
+      response: { body: JSON.stringify({ translations: ['Hola'] }) },
+    });
+
+    const { getByRole } = render(<Sidebar />);
+    fireEvent.click(getByRole('button', { name: 'Translate' }));
+
+    await waitFor(() =>
+      expect(mockSdk.dialogs.openConfirm).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: expect.stringContaining(
+            'from English (United States) to Spanish (United States), overwriting any existing content'
+          ),
+        })
+      )
+    );
+  });
+
+  it('does not translate anything when the confirmation is cancelled', async () => {
+    mockSdk.user.spaceMembership = { admin: false, roles: [{ name: 'Merchants (US)' }] };
+    mockSdk.parameters.installation = {
+      roleTranslationMap: JSON.stringify({
+        'Merchants (US)': { source: 'en-US', target: 'es-US', guidance: '' },
+      }),
+    };
+    mockSdk.entry.fields = {
+      title: {
+        id: 'title',
+        name: 'Title',
+        type: 'Symbol',
+        locales: ['en-US', 'es-US'],
+        getValue: vi.fn(() => 'Hello'),
+        setValue: vi.fn().mockResolvedValue(undefined),
+      },
+    };
+    mockSdk.dialogs.openConfirm.mockResolvedValue(false);
+
+    const { getByRole, queryByText } = render(<Sidebar />);
+    fireEvent.click(getByRole('button', { name: 'Translate' }));
+
+    await waitFor(() => expect(mockSdk.dialogs.openConfirm).toHaveBeenCalledTimes(1));
+    expect(mockSdk.cma.appActionCall.createWithResponse).not.toHaveBeenCalled();
+    expect(queryByText(/Translated/)).toBeNull();
   });
 });

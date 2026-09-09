@@ -120,6 +120,21 @@ const Sidebar = () => {
   const handleTranslate = async () => {
     if (!config) return;
 
+    // Cloned entries can carry over content that already looks right in the target locale
+    // (copied verbatim from whatever was cloned) - making it easy to assume nothing needs
+    // translating when it actually does, or the reverse. Confirming the exact source/target
+    // locales up front, with an explicit overwrite warning, catches both cases before it runs.
+    const confirmed = await sdk.dialogs.openConfirm({
+      title: 'Translate this entry?',
+      message: `This translates from ${localeName(config.source)} to ${localeName(
+        config.target
+      )}, overwriting any existing content currently in ${localeName(config.target)}.`,
+      confirmLabel: 'Translate',
+      cancelLabel: 'Cancel',
+      intent: 'primary',
+    });
+    if (!confirmed) return;
+
     setStatus('translating');
     try {
       const outcome = await translateEntryFields(sdk, config);
