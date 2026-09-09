@@ -14,6 +14,9 @@ describe('Sidebar component', () => {
     mockSdk.cma.entry.publish.mockClear();
     mockSdk.entry.getSys.mockReturnValue({ version: 1 });
     mockSdk.entry.onSysChanged.mockReturnValue(() => {});
+    mockSdk.cma.scheduledActions.getMany.mockReset().mockResolvedValue({ items: [] });
+    mockSdk.cma.scheduledActions.create.mockReset().mockResolvedValue({ sys: { id: 'scheduled-1' } });
+    mockSdk.cma.scheduledActions.delete.mockReset().mockResolvedValue({});
   });
 
   afterEach(cleanup);
@@ -97,5 +100,75 @@ describe('Sidebar component', () => {
     await waitFor(() => expect(mockSdk.dialogs.openCurrentApp).toHaveBeenCalledTimes(1));
     expect(mockSdk.cma.entry.publish).not.toHaveBeenCalled();
     expect(queryByText(/Published/)).toBeNull();
+  });
+
+  it('lists existing scheduled publishes for this entry', async () => {
+    mockSdk.user.spaceMembership = { admin: false, roles: [{ name: 'US Editor' }] };
+    mockSdk.parameters.installation = { roleLocaleMap: { 'US Editor': ['en-US'] } };
+    mockSdk.cma.scheduledActions.getMany.mockResolvedValue({
+      items: [
+        {
+          sys: { id: 'scheduled-1' },
+          action: 'publish',
+          scheduledFor: { datetime: '2026-01-01T00:00:00.000Z', timezone: 'UTC' },
+        },
+      ],
+    });
+
+    const { getByText } = render(<Sidebar />);
+
+    await waitFor(() => expect(mockSdk.cma.scheduledActions.getMany).toHaveBeenCalledWith({
+      query: {
+        'environment.sys.id': 'master',
+        'entity.sys.id': 'test-entry',
+        'sys.status[in]': 'scheduled',
+        order: '-sys.scheduledFor.datetime',
+      },
+    }));
+    await waitFor(() => expect(getByText('Unschedule')).toBeTruthy());
+  });
+
+  it('schedules a publish and refreshes the list', async () => {
+    mockSdk.user.spaceMembership = { admin: false, roles: [{ name: 'US Editor' }] };
+    mockSdk.parameters.installation = { roleLocaleMap: { 'US Editor': ['en-US'] } };
+
+    const { getByText, container } = render(<Sidebar />);
+    await waitFor(() => expect(mockSdk.cma.scheduledActions.getMany).toHaveBeenCalledTimes(1));
+
+    const input = container.querySelector('input[type="datetime-local"]') as HTMLInputElement;
+    fireEvent.change(input, { target: { value: '2026-06-01T09:30' } });
+    fireEvent.click(getByText('Schedule'));
+
+    await waitFor(() => expect(mockSdk.cma.scheduledActions.create).toHaveBeenCalledTimes(1));
+    const [, data] = mockSdk.cma.scheduledActions.create.mock.calls[0];
+    expect(data.action).toBe('publish');
+    expect(data.entity).toEqual({ sys: { type: 'Link', linkType: 'Entry', id: 'test-entry' } });
+    await waitFor(() => expect(mockSdk.cma.scheduledActions.getMany).toHaveBeenCalledTimes(2));
+  });
+
+  it('cancels a scheduled publish', async () => {
+    mockSdk.user.spaceMembership = { admin: false, roles: [{ name: 'US Editor' }] };
+    mockSdk.parameters.installation = { roleLocaleMap: { 'US Editor': ['en-US'] } };
+    mockSdk.cma.scheduledActions.getMany.mockResolvedValue({
+      items: [
+        {
+          sys: { id: 'scheduled-1' },
+          action: 'publish',
+          scheduledFor: { datetime: '2026-01-01T00:00:00.000Z', timezone: 'UTC' },
+        },
+      ],
+    });
+
+    const { getByText } = render(<Sidebar />);
+    await waitFor(() => expect(getByText('Unschedule')).toBeTruthy());
+
+    fireEvent.click(getByText('Unschedule'));
+
+    await waitFor(() =>
+      expect(mockSdk.cma.scheduledActions.delete).toHaveBeenCalledWith({
+        scheduledActionId: 'scheduled-1',
+        environmentId: 'master',
+      })
+    );
   });
 });

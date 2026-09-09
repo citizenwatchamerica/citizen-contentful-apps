@@ -1,11 +1,25 @@
 import { SidebarAppSDK } from '@contentful/app-sdk';
-import { Button, EntityStatusBadge, Flex, Note, Subheading } from '@contentful/f36-components';
+import {
+  Button,
+  EntityStatusBadge,
+  Flex,
+  Note,
+  Subheading,
+  Text,
+  TextInput,
+} from '@contentful/f36-components';
 import { useAutoResizer, useSDK } from '@contentful/react-apps-toolkit';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { getEntryStatus } from '../utils/entryStatus';
 import { getLocaleStatuses } from '../utils/localeStatus';
 import { AppInstallationParameters, getAllowedLocales } from '../utils/permissions';
 import { publishLocales } from '../utils/publishLocales';
+import {
+  cancelScheduledPublish,
+  listScheduledPublishes,
+  schedulePublish,
+  ScheduledPublish,
+} from '../utils/scheduledPublish';
 
 type Status = 'idle' | 'publishing' | 'success' | 'error';
 
@@ -52,6 +66,52 @@ const Sidebar = () => {
     // app's own Publish button succeeds, with no page refresh needed.
     return sdk.entry.onSysChanged(sys => setEntryStatus(getEntryStatus(sys)));
   }, [sdk]);
+
+  const [scheduledPublishes, setScheduledPublishes] = useState<ScheduledPublish[]>([]);
+  const [scheduleInput, setScheduleInput] = useState('');
+  const [scheduleError, setScheduleError] = useState('');
+  const [isScheduling, setIsScheduling] = useState(false);
+
+  const refreshScheduledPublishes = useCallback(async () => {
+    try {
+      const items = await listScheduledPublishes(sdk.cma, sdk.ids.environment, sdk.ids.entry);
+      setScheduledPublishes(items);
+    } catch {
+      // Non-critical - the schedule/cancel controls still work without the list loading.
+    }
+  }, [sdk]);
+
+  useEffect(() => {
+    refreshScheduledPublishes();
+  }, [refreshScheduledPublishes]);
+
+  const handleSchedulePublish = async () => {
+    if (!scheduleInput) return;
+
+    setIsScheduling(true);
+    setScheduleError('');
+    try {
+      const datetime = new Date(scheduleInput).toISOString();
+      const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      await schedulePublish(sdk.cma, sdk.ids.environment, sdk.ids.entry, datetime, timezone);
+      setScheduleInput('');
+      await refreshScheduledPublishes();
+    } catch (err) {
+      setScheduleError(extractErrorMessage(err));
+    } finally {
+      setIsScheduling(false);
+    }
+  };
+
+  const handleCancelScheduledPublish = async (scheduledActionId: string) => {
+    setScheduleError('');
+    try {
+      await cancelScheduledPublish(sdk.cma, sdk.ids.environment, scheduledActionId);
+      await refreshScheduledPublishes();
+    } catch (err) {
+      setScheduleError(extractErrorMessage(err));
+    }
+  };
 
   const parameters = sdk.parameters.installation as AppInstallationParameters;
   const spaceLocales = sdk.locales.available;
@@ -122,6 +182,33 @@ const Sidebar = () => {
       </Button>
       {status === 'success' && <Note variant="positive">Published {publishedLocales.join(', ')}.</Note>}
       {status === 'error' && <Note variant="negative">Publish failed: {errorMessage}</Note>}
+
+      <Flex flexDirection="column" gap="spacingXs">
+        <Text fontWeight="fontWeightDemiBold">Scheduled publish</Text>
+        <Text fontSize="fontSizeS" fontColor="gray500">
+          Publishes every region at once - it can&apos;t be scoped to just yours.
+        </Text>
+        {scheduledPublishes.map(scheduled => (
+          <Flex key={scheduled.id} justifyContent="space-between" alignItems="center" gap="spacingXs">
+            <Text fontSize="fontSizeS">{new Date(scheduled.datetime).toLocaleString()}</Text>
+            <Button size="small" variant="secondary" onClick={() => handleCancelScheduledPublish(scheduled.id)}>
+              Unschedule
+            </Button>
+          </Flex>
+        ))}
+        <Flex gap="spacingXs">
+          <TextInput
+            type="datetime-local"
+            size="small"
+            value={scheduleInput}
+            onChange={e => setScheduleInput(e.target.value)}
+          />
+          <Button size="small" isDisabled={!scheduleInput || isScheduling} isLoading={isScheduling} onClick={handleSchedulePublish}>
+            Schedule
+          </Button>
+        </Flex>
+        {scheduleError && <Note variant="negative">{scheduleError}</Note>}
+      </Flex>
     </Flex>
   );
 };

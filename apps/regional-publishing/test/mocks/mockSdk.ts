@@ -12,6 +12,7 @@ const mockSdk: any = {
   ids: {
     app: 'test-app',
     entry: 'test-entry',
+    environment: 'master',
   },
   locales: {
     available: ['en-US', 'en-GB'],

@@ -8,6 +8,11 @@ const mockCma: any = {
     publish: vi.fn().mockResolvedValue(undefined),
     get: vi.fn().mockResolvedValue({ sys: { fieldStatus: { '*': {} } } }),
   },
+  scheduledActions: {
+    getMany: vi.fn().mockResolvedValue({ items: [] }),
+    create: vi.fn().mockResolvedValue({ sys: { id: 'scheduled-1' } }),
+    delete: vi.fn().mockResolvedValue(undefined),
+  },
 };
 
 export { mockCma };
