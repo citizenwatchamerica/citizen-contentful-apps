@@ -196,14 +196,20 @@ const Sidebar = () => {
             </Button>
           </Flex>
         ))}
-        <Flex gap="spacingXs">
+        <Flex flexDirection="column" gap="spacingXs">
           <TextInput
             type="datetime-local"
             size="small"
             value={scheduleInput}
             onChange={e => setScheduleInput(e.target.value)}
           />
-          <Button size="small" isDisabled={!scheduleInput || isScheduling} isLoading={isScheduling} onClick={handleSchedulePublish}>
+          <Button
+            size="small"
+            isFullWidth
+            isDisabled={!scheduleInput || isScheduling}
+            isLoading={isScheduling}
+            onClick={handleSchedulePublish}
+          >
             Schedule
           </Button>
         </Flex>
