@@ -36,8 +36,8 @@ describe('Sidebar component', () => {
     };
     mockSdk.parameters.installation = { roleLocaleMap: { 'US Editor': ['en-US'] } };
 
-    const { getByText, queryByText } = render(<Sidebar />);
-    expect(getByText('Publish')).toBeTruthy();
+    const { getByRole, queryByText } = render(<Sidebar />);
+    expect(getByRole('button', { name: 'Publish' })).toBeTruthy();
     expect(queryByText(/responsible for/)).toBeNull();
     expect(queryByText(/Not affected/)).toBeNull();
   });
@@ -47,8 +47,8 @@ describe('Sidebar component', () => {
     mockSdk.parameters.installation = { roleLocaleMap: { 'US Editor': ['en-US'] } };
     mockSdk.dialogs.openCurrentApp.mockResolvedValue(['en-US']);
 
-    const { getByText } = render(<Sidebar />);
-    fireEvent.click(getByText('Publish'));
+    const { getByText, getByRole } = render(<Sidebar />);
+    fireEvent.click(getByRole('button', { name: 'Publish' }));
 
     await waitFor(() => expect(mockSdk.dialogs.openCurrentApp).toHaveBeenCalledTimes(1));
     expect(mockSdk.dialogs.openCurrentApp).toHaveBeenCalledWith(
@@ -71,8 +71,8 @@ describe('Sidebar component', () => {
     mockSdk.dialogs.openCurrentApp.mockResolvedValue(['en-US']);
     mockSdk.cma.entry.publish.mockRejectedValueOnce(new Error('{"message":"Validation failed"}'));
 
-    const { getByText } = render(<Sidebar />);
-    fireEvent.click(getByText('Publish'));
+    const { getByText, getByRole } = render(<Sidebar />);
+    fireEvent.click(getByRole('button', { name: 'Publish' }));
 
     await waitFor(() => expect(getByText('Publish failed: Validation failed')).toBeTruthy());
   });
@@ -83,8 +83,8 @@ describe('Sidebar component', () => {
     mockSdk.dialogs.openCurrentApp.mockResolvedValue(['en-US']);
     mockSdk.cma.entry.publish.mockRejectedValueOnce({ status: 422, message: 'Entry is invalid' });
 
-    const { getByText } = render(<Sidebar />);
-    fireEvent.click(getByText('Publish'));
+    const { getByText, getByRole } = render(<Sidebar />);
+    fireEvent.click(getByRole('button', { name: 'Publish' }));
 
     await waitFor(() => expect(getByText('Publish failed: Entry is invalid')).toBeTruthy());
   });
@@ -94,15 +94,15 @@ describe('Sidebar component', () => {
     mockSdk.parameters.installation = { roleLocaleMap: {} };
     mockSdk.dialogs.openCurrentApp.mockResolvedValue(null);
 
-    const { getByText, queryByText } = render(<Sidebar />);
-    fireEvent.click(getByText('Publish'));
+    const { getByRole, queryByText } = render(<Sidebar />);
+    fireEvent.click(getByRole('button', { name: 'Publish' }));
 
     await waitFor(() => expect(mockSdk.dialogs.openCurrentApp).toHaveBeenCalledTimes(1));
     expect(mockSdk.cma.entry.publish).not.toHaveBeenCalled();
     expect(queryByText(/Published/)).toBeNull();
   });
 
-  it('lists existing scheduled publishes for this entry', async () => {
+  it('lists existing scheduled actions for this entry', async () => {
     mockSdk.user.spaceMembership = { admin: false, roles: [{ name: 'US Editor' }] };
     mockSdk.parameters.installation = { roleLocaleMap: { 'US Editor': ['en-US'] } };
     mockSdk.cma.scheduledActions.getMany.mockResolvedValue({
@@ -146,7 +146,24 @@ describe('Sidebar component', () => {
     await waitFor(() => expect(mockSdk.cma.scheduledActions.getMany).toHaveBeenCalledTimes(2));
   });
 
-  it('cancels a scheduled publish', async () => {
+  it('schedules an unpublish when selected from the action dropdown', async () => {
+    mockSdk.user.spaceMembership = { admin: false, roles: [{ name: 'US Editor' }] };
+    mockSdk.parameters.installation = { roleLocaleMap: { 'US Editor': ['en-US'] } };
+
+    const { getByText, getByRole, container } = render(<Sidebar />);
+    await waitFor(() => expect(mockSdk.cma.scheduledActions.getMany).toHaveBeenCalledTimes(1));
+
+    fireEvent.change(getByRole('combobox'), { target: { value: 'unpublish' } });
+    const input = container.querySelector('input[type="datetime-local"]') as HTMLInputElement;
+    fireEvent.change(input, { target: { value: '2026-06-01T09:30' } });
+    fireEvent.click(getByText('Schedule'));
+
+    await waitFor(() => expect(mockSdk.cma.scheduledActions.create).toHaveBeenCalledTimes(1));
+    const [, data] = mockSdk.cma.scheduledActions.create.mock.calls[0];
+    expect(data.action).toBe('unpublish');
+  });
+
+  it('cancels a scheduled action', async () => {
     mockSdk.user.spaceMembership = { admin: false, roles: [{ name: 'US Editor' }] };
     mockSdk.parameters.installation = { roleLocaleMap: { 'US Editor': ['en-US'] } };
     mockSdk.cma.scheduledActions.getMany.mockResolvedValue({

@@ -4,6 +4,7 @@ import {
   EntityStatusBadge,
   Flex,
   Note,
+  Select,
   Subheading,
   Text,
   TextInput,
@@ -15,11 +16,12 @@ import { getLocaleStatuses } from '../utils/localeStatus';
 import { AppInstallationParameters, getAllowedLocales } from '../utils/permissions';
 import { publishLocales } from '../utils/publishLocales';
 import {
-  cancelScheduledPublish,
-  listScheduledPublishes,
-  schedulePublish,
-  ScheduledPublish,
-} from '../utils/scheduledPublish';
+  cancelScheduledAction,
+  createScheduledAction,
+  listScheduledActions,
+  ScheduledActionType,
+  ScheduledEntryAction,
+} from '../utils/scheduledActions';
 
 type Status = 'idle' | 'publishing' | 'success' | 'error';
 
@@ -67,25 +69,26 @@ const Sidebar = () => {
     return sdk.entry.onSysChanged(sys => setEntryStatus(getEntryStatus(sys)));
   }, [sdk]);
 
-  const [scheduledPublishes, setScheduledPublishes] = useState<ScheduledPublish[]>([]);
+  const [scheduledActions, setScheduledActions] = useState<ScheduledEntryAction[]>([]);
+  const [scheduleAction, setScheduleAction] = useState<ScheduledActionType>('publish');
   const [scheduleInput, setScheduleInput] = useState('');
   const [scheduleError, setScheduleError] = useState('');
   const [isScheduling, setIsScheduling] = useState(false);
 
-  const refreshScheduledPublishes = useCallback(async () => {
+  const refreshScheduledActions = useCallback(async () => {
     try {
-      const items = await listScheduledPublishes(sdk.cma, sdk.ids.environment, sdk.ids.entry);
-      setScheduledPublishes(items);
+      const items = await listScheduledActions(sdk.cma, sdk.ids.environment, sdk.ids.entry);
+      setScheduledActions(items);
     } catch {
       // Non-critical - the schedule/cancel controls still work without the list loading.
     }
   }, [sdk]);
 
   useEffect(() => {
-    refreshScheduledPublishes();
-  }, [refreshScheduledPublishes]);
+    refreshScheduledActions();
+  }, [refreshScheduledActions]);
 
-  const handleSchedulePublish = async () => {
+  const handleScheduleAction = async () => {
     if (!scheduleInput) return;
 
     setIsScheduling(true);
@@ -93,9 +96,9 @@ const Sidebar = () => {
     try {
       const datetime = new Date(scheduleInput).toISOString();
       const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-      await schedulePublish(sdk.cma, sdk.ids.environment, sdk.ids.entry, datetime, timezone);
+      await createScheduledAction(sdk.cma, sdk.ids.environment, sdk.ids.entry, scheduleAction, datetime, timezone);
       setScheduleInput('');
-      await refreshScheduledPublishes();
+      await refreshScheduledActions();
     } catch (err) {
       setScheduleError(extractErrorMessage(err));
     } finally {
@@ -103,11 +106,11 @@ const Sidebar = () => {
     }
   };
 
-  const handleCancelScheduledPublish = async (scheduledActionId: string) => {
+  const handleCancelScheduledAction = async (scheduledActionId: string) => {
     setScheduleError('');
     try {
-      await cancelScheduledPublish(sdk.cma, sdk.ids.environment, scheduledActionId);
-      await refreshScheduledPublishes();
+      await cancelScheduledAction(sdk.cma, sdk.ids.environment, scheduledActionId);
+      await refreshScheduledActions();
     } catch (err) {
       setScheduleError(extractErrorMessage(err));
     }
@@ -184,19 +187,29 @@ const Sidebar = () => {
       {status === 'error' && <Note variant="negative">Publish failed: {errorMessage}</Note>}
 
       <Flex flexDirection="column" gap="spacingXs">
-        <Text fontWeight="fontWeightDemiBold">Scheduled publish</Text>
+        <Text fontWeight="fontWeightDemiBold">Scheduled actions</Text>
         <Text fontSize="fontSizeS" fontColor="gray500">
-          Publishes every region at once - it can&apos;t be scoped to just yours.
+          Publishes or unpublishes every region at once - it can&apos;t be scoped to just yours.
         </Text>
-        {scheduledPublishes.map(scheduled => (
+        {scheduledActions.map(scheduled => (
           <Flex key={scheduled.id} justifyContent="space-between" alignItems="center" gap="spacingXs">
-            <Text fontSize="fontSizeS">{new Date(scheduled.datetime).toLocaleString()}</Text>
-            <Button size="small" variant="secondary" onClick={() => handleCancelScheduledPublish(scheduled.id)}>
+            <Text fontSize="fontSizeS">
+              {scheduled.action === 'publish' ? 'Publish' : 'Unpublish'} · {new Date(scheduled.datetime).toLocaleString()}
+            </Text>
+            <Button size="small" variant="secondary" onClick={() => handleCancelScheduledAction(scheduled.id)}>
               Unschedule
             </Button>
           </Flex>
         ))}
         <Flex flexDirection="column" gap="spacingXs">
+          <Select
+            size="small"
+            value={scheduleAction}
+            onChange={e => setScheduleAction(e.target.value as ScheduledActionType)}
+          >
+            <Select.Option value="publish">Publish</Select.Option>
+            <Select.Option value="unpublish">Unpublish</Select.Option>
+          </Select>
           <TextInput
             type="datetime-local"
             size="small"
@@ -208,7 +221,7 @@ const Sidebar = () => {
             isFullWidth
             isDisabled={!scheduleInput || isScheduling}
             isLoading={isScheduling}
-            onClick={handleSchedulePublish}
+            onClick={handleScheduleAction}
           >
             Schedule
           </Button>

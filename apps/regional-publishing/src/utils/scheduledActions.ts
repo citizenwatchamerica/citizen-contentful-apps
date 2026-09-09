@@ -1,18 +1,21 @@
 import type { CMAClient } from '@contentful/app-sdk';
 
-export interface ScheduledPublish {
+export type ScheduledActionType = 'publish' | 'unpublish';
+
+export interface ScheduledEntryAction {
   id: string;
+  action: ScheduledActionType;
   datetime: string;
   timezone?: string;
 }
 
 // Scheduled Actions are a space-level resource (not auto-scoped to the current entry/environment
 // the way sdk.cma.entry.* calls are), so every call here has to name the environment explicitly.
-export const listScheduledPublishes = async (
+export const listScheduledActions = async (
   cma: CMAClient,
   environmentId: string,
   entryId: string
-): Promise<ScheduledPublish[]> => {
+): Promise<ScheduledEntryAction[]> => {
   const result = await cma.scheduledActions.getMany({
     query: {
       'environment.sys.id': environmentId,
@@ -23,9 +26,12 @@ export const listScheduledPublishes = async (
   });
 
   return result.items
-    .filter(item => item.action === 'publish')
+    .filter((item): item is typeof item & { action: ScheduledActionType } =>
+      item.action === 'publish' || item.action === 'unpublish'
+    )
     .map(item => ({
       id: item.sys.id,
+      action: item.action,
       datetime: item.scheduledFor.datetime,
       timezone: item.scheduledFor.timezone,
     }));
@@ -33,12 +39,13 @@ export const listScheduledPublishes = async (
 
 // Whole-entry only: Contentful's Scheduled Actions API rejects a `locales`/`payload.locales`
 // field outright ("not allowed") - selective-locale publish only exists for immediate publish,
-// not scheduled. A scheduled publish here always publishes every locale on the entry, same as
-// clicking the native Publish button would, just deferred to a later time.
-export const schedulePublish = async (
+// not scheduled. A scheduled publish/unpublish here always affects every locale on the entry,
+// same as clicking the native Publish/Unpublish button would, just deferred to a later time.
+export const createScheduledAction = async (
   cma: CMAClient,
   environmentId: string,
   entryId: string,
+  action: ScheduledActionType,
   datetime: string,
   timezone: string
 ): Promise<void> => {
@@ -47,13 +54,13 @@ export const schedulePublish = async (
     {
       entity: { sys: { type: 'Link', linkType: 'Entry', id: entryId } },
       environment: { sys: { type: 'Link', linkType: 'Environment', id: environmentId } },
-      action: 'publish',
+      action,
       scheduledFor: { datetime, timezone },
     }
   );
 };
 
-export const cancelScheduledPublish = async (
+export const cancelScheduledAction = async (
   cma: CMAClient,
   environmentId: string,
   scheduledActionId: string
