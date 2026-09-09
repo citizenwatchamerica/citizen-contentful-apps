@@ -12,6 +12,7 @@ import ProductSearchResults from './ProductSearchResults';
 import CategorySearchResults from './CategorySearchResults';
 import { AppInstallationParameters } from '../../locations/ConfigScreen';
 import { DialogInvocationParameters } from '../../locations/Dialog';
+import { SiteMap, pruneSiteMap } from '../../utils/siteMap';
 
 export const headerHeight = 114;
 export const stickyHeaderBreakpoint = 900;
@@ -20,7 +21,7 @@ export const height = window.outerHeight - window.outerHeight * 0.3 - headerHeig
 const SearchPicker = () => {
   const sdk = useSDK<DialogAppSDK>();
   const installParameters = sdk.parameters.installation as AppInstallationParameters;
-  const { selectMultiple, fieldType, fieldValue, currentData, siteIds } = sdk.parameters
+  const { selectMultiple, fieldType, fieldValue, currentData, siteIds, siteMap } = sdk.parameters
     .invocation as DialogInvocationParameters;
 
   const [selectedSiteId, setSelectedSiteId] = useState<string>(siteIds[0]);
@@ -29,6 +30,7 @@ const SearchPicker = () => {
   const [selected, setSelected] = useState<string | string[] | undefined>(fieldValue);
   const [selectedData, setSelectedItemsInfo] = useState<any[]>(currentData || []);
   const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [siteById, setSiteById] = useState<SiteMap>(siteMap || {});
 
   const onSiteChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
     setSelectedSiteId(event.target.value);
@@ -40,7 +42,18 @@ const SearchPicker = () => {
   };
 
   const onSave = () => {
-    sdk.close(selected);
+    const selectedIds = typeof selected === 'string' ? [selected] : selected || [];
+    sdk.close({ value: selected, siteMap: pruneSiteMap(siteById, selectedIds) });
+  };
+
+  // Which site was active when each item was picked. The site cannot be worked
+  // out later where sites share a catalog, so it is recorded at selection time.
+  const recordSite = (id: string, isSelected: boolean) => {
+    setSiteById((current) => {
+      const next = { ...current };
+      isSelected ? (next[id] = selectedSiteId) : delete next[id];
+      return next;
+    });
   };
 
   const findSearchResultData = (id: string) => {
@@ -54,6 +67,7 @@ const SearchPicker = () => {
         // Empty array, Initial Value
         setSelected([id]);
         setSelectedItemsInfo([findSearchResultData(id)]);
+        recordSite(id, true);
       } else {
         // Array exists, modify it
 
@@ -64,9 +78,11 @@ const SearchPicker = () => {
           // Item exists in array, unset it
           updateSelected.splice(includedIndex, 1);
           updateSelectedData = selectedData.filter((item) => item.id !== id);
+          recordSite(id, false);
         } else {
           updateSelected.push(id);
           updateSelectedData = [...selectedData, findSearchResultData(id)];
+          recordSite(id, true);
         }
 
         setSelected(updateSelected);
@@ -77,9 +93,11 @@ const SearchPicker = () => {
       if (selected === id) {
         setSelected('');
         setSelectedItemsInfo([]);
+        setSiteById({});
       } else {
         setSelected(id);
         setSelectedItemsInfo([findSearchResultData(id)]);
+        setSiteById({ [id]: selectedSiteId });
       }
     }
   };
@@ -136,6 +154,11 @@ const SearchPicker = () => {
     </Modal.Content>
   );
 };
+
+export interface SearchPickerResult {
+  value: string | string[];
+  siteMap: SiteMap;
+}
 
 export interface SearchResultsProps {
   searchResults: any[];

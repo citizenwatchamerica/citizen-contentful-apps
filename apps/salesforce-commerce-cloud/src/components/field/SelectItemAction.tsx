@@ -14,6 +14,8 @@ import logo from '../../Salesforce_Corporate_Logo_RGB.png';
 import SfccClient, { parseCategoryId } from '../../utils/Sfcc';
 import { AppInstallationParameters } from '../../locations/ConfigScreen';
 import { DialogInvocationParameters } from '../../locations/Dialog';
+import { SearchPickerResult } from '../dialog/SearchPicker';
+import { SITE_MAP_FIELD_ID, readSiteMap, writeSiteMap } from '../../utils/siteMap';
 
 const logoStyle = css`
   display: block;
@@ -42,15 +44,17 @@ const SelectItemAction = (props: SelectItemActionProps) => {
   }
 
   const client = new SfccClient(installParameters, props.siteIds[0]);
+  const siteMap = fieldType === 'category' ? readSiteMap(sdk) : {};
   const currentItemQueries = useQueries({
     queries: queryArray.map((rawId: string) => {
       const id = fieldType === 'category' ? parseCategoryId(rawId) : rawId;
+      const storedSiteId = siteMap[id];
       return {
-        queryKey: ['itemInfo', id],
+        queryKey: ['itemInfo', id, storedSiteId],
         queryFn:
           fieldType === 'product'
             ? () => client.fetchProduct(id)
-            : () => client.fetchCategoryById(id),
+            : () => client.fetchCategoryById(id, storedSiteId),
       };
     }),
   });
@@ -90,16 +94,32 @@ const SelectItemAction = (props: SelectItemActionProps) => {
       currentData: currentData,
       fieldValue: props.fieldValue,
       siteIds: props.siteIds,
+      siteMap: fieldType === 'category' ? readSiteMap(sdk) : undefined,
     };
 
     if (!queryArray.length || queriesComplete) {
-      const result = await sdk.dialogs.openCurrent({
+      const result: SearchPickerResult | undefined = await sdk.dialogs.openCurrent({
         width: 1400,
         shouldCloseOnOverlayClick: true,
         parameters,
       });
-      if (result?.length) {
-        sdk.field.setValue(result);
+
+      if (!result?.value?.length) return;
+
+      await sdk.field.setValue(result.value);
+
+      // The companion field is added by hand per content type, so a failure to
+      // write it is a setup problem worth surfacing rather than swallowing. The
+      // selection itself is already saved, and cards fall back to deriving the
+      // site from the category's catalog.
+      if (fieldType === 'category') {
+        try {
+          await writeSiteMap(sdk, result.siteMap);
+        } catch {
+          sdk.notifier.error(
+            `Saved the selection, but could not record the site in ${SITE_MAP_FIELD_ID}.`
+          );
+        }
       }
     }
   };
