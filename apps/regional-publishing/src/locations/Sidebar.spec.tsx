@@ -89,6 +89,29 @@ describe('Sidebar component', () => {
     await waitFor(() => expect(getByText('Publish failed: Entry is invalid')).toBeTruthy());
   });
 
+  it('surfaces the specific field/locale reason from a Contentful validation error, not just the generic label', async () => {
+    mockSdk.user.spaceMembership = { admin: true, roles: [] };
+    mockSdk.parameters.installation = { roleLocaleMap: {} };
+    mockSdk.dialogs.openCurrentApp.mockResolvedValue(['en-US']);
+    mockSdk.cma.entry.publish.mockRejectedValueOnce(
+      new Error(
+        JSON.stringify({
+          message: 'Validation error',
+          details: { errors: [{ name: 'required', path: ['fields', 'columns'], details: 'The property "columns" is required here' }] },
+        })
+      )
+    );
+
+    const { getByText, getByRole } = render(<Sidebar />);
+    fireEvent.click(getByRole('button', { name: 'Publish' }));
+
+    await waitFor(() =>
+      expect(
+        getByText('Publish failed: Validation error: The property "columns" is required here')
+      ).toBeTruthy()
+    );
+  });
+
   it('does nothing when the dialog is cancelled', async () => {
     mockSdk.user.spaceMembership = { admin: true, roles: [] };
     mockSdk.parameters.installation = { roleLocaleMap: {} };

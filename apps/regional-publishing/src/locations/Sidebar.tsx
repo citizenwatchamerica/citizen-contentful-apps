@@ -37,7 +37,14 @@ const extractErrorMessage = (err: unknown): string => {
   if (typeof rawMessage === 'string') {
     try {
       const parsed = JSON.parse(rawMessage);
-      return typeof parsed?.message === 'string' ? parsed.message : rawMessage;
+      if (typeof parsed?.message !== 'string') return rawMessage;
+
+      // Contentful's top-level message is a generic label ("Validation error") - the actual
+      // reason lives in details.errors[], e.g. { details: 'The property "columns" is required here' }.
+      const detailErrors = Array.isArray(parsed?.details?.errors)
+        ? parsed.details.errors.map((e: { details?: string }) => e?.details).filter(Boolean).join('; ')
+        : '';
+      return detailErrors ? `${parsed.message}: ${detailErrors}` : parsed.message;
     } catch {
       return rawMessage;
     }
