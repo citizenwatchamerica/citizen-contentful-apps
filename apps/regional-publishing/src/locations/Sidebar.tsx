@@ -16,6 +16,8 @@ import { getEntryStatus } from '../utils/entryStatus';
 import { getLocaleStatuses } from '../utils/localeStatus';
 import { AppInstallationParameters, getAllowedLocales } from '../utils/permissions';
 import { publishLocales } from '../utils/publishLocales';
+import { unpublishEntry, unpublishLocales } from '../utils/unpublishLocales';
+import type { DialogMode } from './Dialog';
 import {
   cancelScheduledAction,
   createScheduledAction,
@@ -24,7 +26,10 @@ import {
   ScheduledEntryAction,
 } from '../utils/scheduledActions';
 
-type Status = 'idle' | 'publishing' | 'success' | 'error';
+const actionCopy = {
+  publish: { title: 'Publish regions', done: 'Published', failed: 'Publish failed' },
+  unpublish: { title: 'Unpublish regions', done: 'Unpublished', failed: 'Unpublish failed' },
+};
 
 interface ExtractedError {
   message: string;
@@ -103,9 +108,10 @@ const Sidebar = () => {
   const sdk = useSDK<SidebarAppSDK>();
   useAutoResizer();
 
-  const [status, setStatus] = useState<Status>('idle');
-  const [publishedLocales, setPublishedLocales] = useState<string[]>([]);
-  const [publishError, setPublishError] = useState<ExtractedError | null>(null);
+  const [pendingAction, setPendingAction] = useState<DialogMode | null>(null);
+  const [result, setResult] = useState<{ action: DialogMode; locales: string[] } | null>(null);
+  const [actionError, setActionError] = useState<{ action: DialogMode; error: ExtractedError } | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [entryStatus, setEntryStatus] = useState(() => getEntryStatus(sdk.entry.getSys()));
 
   useEffect(() => {
@@ -172,35 +178,75 @@ const Sidebar = () => {
 
   const excludedLocales = spaceLocales.filter(locale => !allowedLocales.includes(locale));
 
-  const handlePublish = async () => {
+  const runLocaleAction = async (action: DialogMode) => {
+    setNotice(null);
     const localeStatus = await getLocaleStatuses(sdk.cma, sdk.ids.entry, [
       ...allowedLocales,
       ...excludedLocales,
     ]);
 
+    // For unpublish, only regions that are actually live can be picked; the user's never-
+    // published regions join the other teams' ones under "Not affected". A locale reads as
+    // `draft` only when the status fetch succeeded and says so - if it failed, the map is
+    // empty and every allowed locale stays pickable rather than hiding the whole list.
+    const dialogLocales =
+      action === 'publish'
+        ? allowedLocales
+        : allowedLocales.filter(locale => localeStatus[locale] !== 'draft');
+    // Every locale live right now, across all teams. Empty when the status fetch failed.
+    const liveLocales = spaceLocales.filter(
+      locale => localeStatus[locale] && localeStatus[locale] !== 'draft'
+    );
+
+    if (dialogLocales.length === 0) {
+      setNotice("None of your regions are currently published, so there's nothing to unpublish.");
+      return;
+    }
+
     // Mirrors the native Publish button's review step: the user sees exactly which of
-    // their regions are about to go out and can narrow the selection before confirming.
+    // their regions are about to change and can narrow the selection before confirming.
     const selectedLocales = await sdk.dialogs.openCurrentApp({
-      title: 'Publish regions',
+      title: actionCopy[action].title,
       width: 'small',
       minHeight: 450,
       allowHeightOverflow: true,
-      parameters: { allowedLocales, excludedLocales, localeStatus, localeNames },
+      parameters: {
+        ...(action === 'unpublish' && {
+          mode: action,
+          defaultLocale: sdk.locales.default,
+          liveLocales,
+        }),
+        allowedLocales: dialogLocales,
+        excludedLocales: spaceLocales.filter(locale => !dialogLocales.includes(locale)),
+        localeStatus,
+        localeNames,
+      },
     });
 
     if (!selectedLocales || selectedLocales.length === 0) {
       return;
     }
 
-    setStatus('publishing');
+    setPendingAction(action);
+    setResult(null);
+    setActionError(null);
     try {
       const { version } = sdk.entry.getSys();
-      await publishLocales(sdk.cma, sdk.ids.entry, version, selectedLocales);
-      setPublishedLocales(selectedLocales);
-      setStatus('success');
+      const takesDownEverything =
+        liveLocales.length > 0 && liveLocales.every(locale => selectedLocales.includes(locale));
+
+      if (action === 'publish') {
+        await publishLocales(sdk.cma, sdk.ids.entry, version, selectedLocales);
+      } else if (takesDownEverything) {
+        await unpublishEntry(sdk.cma, sdk.ids.entry);
+      } else {
+        await unpublishLocales(sdk.cma, sdk.ids.entry, version, selectedLocales);
+      }
+      setResult({ action, locales: selectedLocales });
     } catch (err) {
-      setPublishError(extractErrorMessage(err));
-      setStatus('error');
+      setActionError({ action, error: extractErrorMessage(err) });
+    } finally {
+      setPendingAction(null);
     }
   };
 
@@ -219,17 +265,34 @@ const Sidebar = () => {
         <Subheading marginBottom="none">Regional Publishing</Subheading>
         <EntityStatusBadge entityStatus={entryStatus} />
       </Flex>
-      <Button
-        variant="positive"
-        isFullWidth
-        isDisabled={status === 'publishing'}
-        isLoading={status === 'publishing'}
-        onClick={handlePublish}
-      >
-        Publish
-      </Button>
-      {status === 'success' && <Note variant="positive">Published {publishedLocales.join(', ')}.</Note>}
-      {status === 'error' && publishError && <ErrorNote prefix="Publish failed" error={publishError} />}
+      <Flex flexDirection="column" gap="spacingXs">
+        <Button
+          variant="positive"
+          isFullWidth
+          isDisabled={pendingAction !== null}
+          isLoading={pendingAction === 'publish'}
+          onClick={() => runLocaleAction('publish')}
+        >
+          Publish
+        </Button>
+        <Button
+          variant="secondary"
+          isFullWidth
+          // `draft`/`archived` means no locale is live, so there's nothing to take down.
+          isDisabled={pendingAction !== null || entryStatus === 'draft' || entryStatus === 'archived'}
+          isLoading={pendingAction === 'unpublish'}
+          onClick={() => runLocaleAction('unpublish')}
+        >
+          Unpublish
+        </Button>
+      </Flex>
+      {notice && <Note variant="neutral">{notice}</Note>}
+      {result && (
+        <Note variant="positive">
+          {actionCopy[result.action].done} {result.locales.join(', ')}.
+        </Note>
+      )}
+      {actionError && <ErrorNote prefix={actionCopy[actionError.action].failed} error={actionError.error} />}
 
       <Flex flexDirection="column" gap="spacingXs">
         <Text fontWeight="fontWeightDemiBold">Scheduled actions</Text>

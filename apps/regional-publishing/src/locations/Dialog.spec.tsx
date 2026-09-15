@@ -48,6 +48,39 @@ describe('Dialog component', () => {
     expect(mockSdk.close).toHaveBeenCalledWith(['en-US']);
   });
 
+  it('in unpublish mode, starts with nothing checked and uses unpublish wording', () => {
+    mockSdk.parameters.invocation = { ...mockSdk.parameters.invocation, mode: 'unpublish' };
+    const { getByText, container } = render(<Dialog />);
+
+    expect(container.querySelector('#dialog-unpublish-en-US')).toHaveProperty('checked', false);
+    expect(container.querySelector('#dialog-unpublish-en-GB')).toHaveProperty('checked', false);
+    expect(getByText('Not affected')).toBeTruthy();
+    expect(getByText('Unpublish selected regions (0)').closest('button')).toHaveProperty('disabled', true);
+
+    fireEvent.click(container.querySelector('#dialog-unpublish-en-GB')!);
+    fireEvent.click(getByText('Unpublish selected regions (1)'));
+
+    expect(mockSdk.close).toHaveBeenCalledWith(['en-GB']);
+  });
+
+  it('blocks unpublishing the default locale unless every live locale is selected too', () => {
+    mockSdk.parameters.invocation = {
+      ...mockSdk.parameters.invocation,
+      mode: 'unpublish',
+      defaultLocale: 'en-US',
+      liveLocales: ['en-US', 'en-GB'],
+    };
+    const { getByText, queryByText, container } = render(<Dialog />);
+
+    fireEvent.click(container.querySelector('#dialog-unpublish-en-US')!);
+    expect(getByText(/is the default locale/)).toBeTruthy();
+    expect(getByText('Unpublish selected regions (1)').closest('button')).toHaveProperty('disabled', true);
+
+    fireEvent.click(container.querySelector('#dialog-unpublish-en-GB')!);
+    expect(queryByText(/is the default locale/)).toBeNull();
+    expect(getByText('Unpublish all my regions (2)').closest('button')).toHaveProperty('disabled', false);
+  });
+
   it('closes with null on cancel', () => {
     const { getByText } = render(<Dialog />);
 

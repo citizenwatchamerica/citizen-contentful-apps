@@ -10,7 +10,10 @@ never accidentally ship another team's in-progress edits in a different locale.
 
 - **Config screen**: an admin maps each space Role to the locales that role may publish.
 - **Sidebar**: resolves the current user's role(s) (space Admins always get every locale), shows
-  which locales will be published, and publishes only those.
+  which locales will be published, and publishes only those. An **Unpublish** button does the
+  reverse through `remove.fields` on the same endpoint: it offers only the user's currently
+  published locales and takes down just the ones they pick. Unpublishing every locale that's
+  still live leaves the entry fully unpublished, same as the native button.
 
 ## Local development
 
