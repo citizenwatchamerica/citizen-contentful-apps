@@ -12,6 +12,7 @@ import { FieldAppSDK } from '@contentful/app-sdk';
 // Local Imports
 import { AppInstallationParameters } from '../../locations/ConfigScreen';
 import SfccClient, { parseCategoryId } from '../../utils/Sfcc';
+import { SiteMap } from '../../utils/siteMap';
 
 interface ItemProps {
   id: string;
@@ -21,6 +22,7 @@ interface ItemProps {
 
 interface ItemCardProps extends ItemProps {
   siteId: string;
+  siteMap?: SiteMap;
   withDragHandle?: boolean;
   dragHandleRender?: (props: {
     isDragging?: boolean;
@@ -34,13 +36,32 @@ const ItemCard = (props: ItemCardProps) => {
   const client = new SfccClient(installParameters, props.siteId);
 
   const itemId = props.type === 'category' ? parseCategoryId(props.id) : props.id;
+  const storedSiteId = props.siteMap?.[itemId];
+
   const { isLoading, data: itemData } = useQuery({
-    queryKey: ['itemInfo', itemId],
+    queryKey: ['itemInfo', itemId, storedSiteId],
     queryFn:
       props.type === 'product'
         ? () => client.fetchProduct(itemId)
-        : () => client.fetchCategoryById(itemId),
+        : () => client.fetchCategoryById(itemId, storedSiteId),
   });
+  const { data: catalogSites } = useQuery({
+    queryKey: ['catalogSites', itemData?.catalogId],
+    queryFn: () => client.fetchSitesForCatalog(itemData.catalogId),
+    enabled: props.type === 'category' && Boolean(itemData?.catalogId),
+  });
+
+  // Prefer the site recorded when the category was selected, but only once it is
+  // confirmed to serve this category's catalog — a stored site that does not is
+  // stale, and the catalog's own sites are the better answer. Until that check
+  // resolves, show the stored site rather than flickering through an empty state.
+  const sites = !catalogSites
+    ? storedSiteId
+      ? [storedSiteId]
+      : []
+    : storedSiteId && catalogSites.includes(storedSiteId)
+    ? [storedSiteId]
+    : catalogSites;
 
   return (
     <Card
@@ -54,6 +75,7 @@ const ItemCard = (props: ItemCardProps) => {
             <ItemPreview
               id={props.id}
               type={props.type}
+              sites={sites}
               itemData={itemData}
               onRemove={props.onRemove}
             />
@@ -68,6 +90,7 @@ const ItemCard = (props: ItemCardProps) => {
 
 interface ItemPreviewProps extends ItemProps {
   itemData: any;
+  sites: string[];
 }
 
 const ItemPreview = (props: ItemPreviewProps) => {
@@ -103,7 +126,7 @@ const ItemPreview = (props: ItemPreviewProps) => {
         </Text>
         <Text as="div" fontWeight="fontWeightMedium" fontSize="fontSizeS" fontColor="gray600">
           ID: {itemData.id}
-          {props.type === 'category' && (
+          {props.type === 'category' && props.sites.length > 0 && (
             <>
               <Box
                 as="span"
@@ -113,7 +136,7 @@ const ItemPreview = (props: ItemPreviewProps) => {
                 |
               </Box>
               <Box as="span" css={categoryStyle}>
-                Catalog: {itemData.name?.default || itemData.catalogId}
+                {props.sites.length === 1 ? 'Site' : 'Sites'}: {props.sites.join(', ')}
               </Box>
             </>
           )}

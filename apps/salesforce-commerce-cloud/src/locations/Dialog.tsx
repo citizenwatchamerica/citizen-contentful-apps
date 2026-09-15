@@ -4,6 +4,7 @@ import { KeyValueMap } from 'contentful-management';
 import { /* useCMA, */ useSDK, useAutoResizer } from '@contentful/react-apps-toolkit';
 import { Modal, Flex } from '@contentful/f36-components';
 import SearchPicker from '../components/dialog/SearchPicker';
+import { SiteMap } from '../utils/siteMap';
 
 export interface DialogInvocationParameters extends KeyValueMap {
   selectMultiple: boolean;
@@ -11,6 +12,7 @@ export interface DialogInvocationParameters extends KeyValueMap {
   fieldValue?: string | string[];
   currentData?: any | any[];
   siteIds: string[];
+  siteMap?: SiteMap;
 }
 
 const Dialog = () => {
