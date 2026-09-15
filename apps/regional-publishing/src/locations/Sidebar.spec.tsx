@@ -157,6 +157,99 @@ describe('Sidebar component', () => {
     expect(queryByText(/Published/)).toBeNull();
   });
 
+  it('disables Unpublish while the entry has never been published', () => {
+    mockSdk.user.spaceMembership = { admin: true, roles: [] };
+    mockSdk.parameters.installation = { roleLocaleMap: {} };
+    mockSdk.entry.getSys.mockReturnValue({ version: 1 });
+
+    const { getByRole } = render(<Sidebar />);
+    expect(getByRole('button', { name: 'Unpublish' })).toHaveProperty('disabled', true);
+  });
+
+  it('offers only the published regions for unpublish, then unpublishes what the dialog returns', async () => {
+    mockSdk.user.spaceMembership = { admin: false, roles: [{ name: 'NA Editor' }] };
+    mockSdk.parameters.installation = { roleLocaleMap: { 'NA Editor': ['en-US', 'en-GB'] } };
+    mockSdk.locales.available = ['en-US', 'en-GB', 'fr-FR'];
+    mockSdk.entry.getSys.mockReturnValue({ version: 5, publishedVersion: 4 });
+    mockSdk.cma.entry.get.mockResolvedValueOnce({
+      sys: { fieldStatus: { '*': { 'en-US': 'published', 'fr-FR': 'changed' } } },
+    });
+    mockSdk.cma.entry.unpublish.mockClear();
+    mockSdk.dialogs.openCurrentApp.mockResolvedValue(['en-US']);
+
+    const { getByText, getByRole } = render(<Sidebar />);
+    fireEvent.click(getByRole('button', { name: 'Unpublish' }));
+
+    await waitFor(() => expect(mockSdk.dialogs.openCurrentApp).toHaveBeenCalledTimes(1));
+    expect(mockSdk.dialogs.openCurrentApp).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: 'Unpublish regions',
+        parameters: expect.objectContaining({
+          mode: 'unpublish',
+          allowedLocales: ['en-US'],
+          excludedLocales: ['en-GB', 'fr-FR'],
+        }),
+      })
+    );
+
+    await waitFor(() => expect(getByText('Unpublished en-US.')).toBeTruthy());
+    expect(mockSdk.cma.entry.unpublish).toHaveBeenCalledWith(
+      { entryId: 'test-entry', locales: ['en-US'] },
+      { sys: { id: 'test-entry', type: 'Entry', version: 5 } }
+    );
+    expect(mockSdk.cma.entry.publish).not.toHaveBeenCalled();
+    mockSdk.locales.available = ['en-US', 'en-GB'];
+  });
+
+  it('unpublishes the whole entry when the selection covers every live locale', async () => {
+    mockSdk.user.spaceMembership = { admin: true, roles: [] };
+    mockSdk.parameters.installation = { roleLocaleMap: {} };
+    mockSdk.entry.getSys.mockReturnValue({ version: 5, publishedVersion: 4 });
+    mockSdk.cma.entry.get.mockResolvedValueOnce({
+      sys: { fieldStatus: { '*': { 'en-US': 'published', 'en-GB': 'changed' } } },
+    });
+    mockSdk.cma.entry.unpublish.mockClear();
+    mockSdk.dialogs.openCurrentApp.mockResolvedValue(['en-US', 'en-GB']);
+
+    const { getByText, getByRole } = render(<Sidebar />);
+    fireEvent.click(getByRole('button', { name: 'Unpublish' }));
+
+    await waitFor(() => expect(getByText('Unpublished en-US, en-GB.')).toBeTruthy());
+    expect(mockSdk.dialogs.openCurrentApp).toHaveBeenCalledWith(
+      expect.objectContaining({
+        parameters: expect.objectContaining({ defaultLocale: 'en-US', liveLocales: ['en-US', 'en-GB'] }),
+      })
+    );
+    expect(mockSdk.cma.entry.unpublish).toHaveBeenCalledWith({ entryId: 'test-entry' });
+  });
+
+  it("explains instead of opening the dialog when none of the user's regions are published", async () => {
+    mockSdk.user.spaceMembership = { admin: false, roles: [{ name: 'US Editor' }] };
+    mockSdk.parameters.installation = { roleLocaleMap: { 'US Editor': ['en-US'] } };
+    mockSdk.entry.getSys.mockReturnValue({ version: 5, publishedVersion: 4 });
+    mockSdk.cma.entry.get.mockResolvedValueOnce({ sys: { fieldStatus: { '*': { 'en-GB': 'published' } } } });
+
+    const { getByText, getByRole } = render(<Sidebar />);
+    fireEvent.click(getByRole('button', { name: 'Unpublish' }));
+
+    await waitFor(() => expect(getByText(/nothing to unpublish/)).toBeTruthy());
+    expect(mockSdk.dialogs.openCurrentApp).not.toHaveBeenCalled();
+  });
+
+  it('shows the real error message when unpublish is rejected', async () => {
+    mockSdk.user.spaceMembership = { admin: true, roles: [] };
+    mockSdk.parameters.installation = { roleLocaleMap: {} };
+    mockSdk.entry.getSys.mockReturnValue({ version: 5, publishedVersion: 4 });
+    mockSdk.cma.entry.get.mockResolvedValueOnce({ sys: { fieldStatus: { '*': { 'en-US': 'published' } } } });
+    mockSdk.dialogs.openCurrentApp.mockResolvedValue(['en-US']);
+    mockSdk.cma.entry.unpublish.mockRejectedValueOnce(new Error('{"message":"Default locale required"}'));
+
+    const { getByText, getByRole } = render(<Sidebar />);
+    fireEvent.click(getByRole('button', { name: 'Unpublish' }));
+
+    await waitFor(() => expect(getByText('Unpublish failed: Default locale required')).toBeTruthy());
+  });
+
   it('lists existing scheduled actions for this entry', async () => {
     mockSdk.user.spaceMembership = { admin: false, roles: [{ name: 'US Editor' }] };
     mockSdk.parameters.installation = { roleLocaleMap: { 'US Editor': ['en-US'] } };

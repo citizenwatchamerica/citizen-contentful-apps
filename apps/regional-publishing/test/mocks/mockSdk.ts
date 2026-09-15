@@ -15,6 +15,7 @@ const mockSdk: any = {
     environment: 'master',
   },
   locales: {
+    default: 'en-US',
     available: ['en-US', 'en-GB'],
     names: { 'en-US': 'English (United States)', 'en-GB': 'English (United Kingdom)' },
   },
