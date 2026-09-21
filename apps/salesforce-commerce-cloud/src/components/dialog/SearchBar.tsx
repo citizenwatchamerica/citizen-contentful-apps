@@ -10,6 +10,7 @@ import {
   Tooltip,
   Grid,
   Select,
+  Text,
 } from '@contentful/f36-components';
 import { SearchIcon, CloseIcon, ErrorCircleIcon, AssetIcon, TagsIcon } from '@contentful/f36-icons';
 import tokens from '@contentful/f36-tokens';
@@ -31,6 +32,7 @@ interface SearchBarProps {
   siteIds: string[];
   selectedSiteId: string;
   onSiteChange: (event: React.ChangeEvent<HTMLSelectElement>) => void;
+  selectionLimitMessage?: string;
 }
 
 interface SearchControlProps extends SearchBarProps {
@@ -141,13 +143,28 @@ const LeftSideControls = (props: SearchControlProps) => {
 
 const RightSideControls = (props: SearchControlProps) => {
   return (
-    <Flex justifyContent="flex-end" alignItems="center" flexGrow={1} gap="spacingM">
+    <Flex
+      justifyContent="flex-end"
+      alignItems="center"
+      flexGrow={1}
+      gap="spacingM"
+      css={{ flexWrap: 'wrap' }}>
       <SelectionList
         items={props.selectedItems}
         itemsInfo={props.selectedData}
         removeSelected={props.removeSelected}
         fieldType={props.fieldType}
       />
+      {props.selectionLimitMessage && (
+        <Text
+          as="p"
+          fontSize="fontSizeS"
+          css={css`
+            color: ${tokens.colorWarning};
+          `}>
+          {props.selectionLimitMessage}
+        </Text>
+      )}
       <Button variant="primary" onClick={props.onSave} isDisabled={props.saveIsDisabled}>
         Save
       </Button>
