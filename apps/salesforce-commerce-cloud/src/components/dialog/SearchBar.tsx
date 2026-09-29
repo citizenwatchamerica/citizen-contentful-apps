@@ -10,6 +10,7 @@ import {
   Tooltip,
   Grid,
   Select,
+  Text,
 } from '@contentful/f36-components';
 import { SearchIcon, CloseIcon, ErrorCircleIcon, AssetIcon, TagsIcon } from '@contentful/f36-icons';
 import tokens from '@contentful/f36-tokens';
@@ -31,6 +32,8 @@ interface SearchBarProps {
   siteIds: string[];
   selectedSiteId: string;
   onSiteChange: (event: React.ChangeEvent<HTMLSelectElement>) => void;
+  selectionLimitMessage?: string;
+  showSaveButton?: boolean;
 }
 
 interface SearchControlProps extends SearchBarProps {
@@ -141,16 +144,44 @@ const LeftSideControls = (props: SearchControlProps) => {
 
 const RightSideControls = (props: SearchControlProps) => {
   return (
-    <Flex justifyContent="flex-end" alignItems="center" flexGrow={1} gap="spacingM">
-      <SelectionList
-        items={props.selectedItems}
-        itemsInfo={props.selectedData}
-        removeSelected={props.removeSelected}
-        fieldType={props.fieldType}
-      />
-      <Button variant="primary" onClick={props.onSave} isDisabled={props.saveIsDisabled}>
-        Save
-      </Button>
+    <Flex
+      justifyContent="flex-end"
+      alignItems="center"
+      flexGrow={1}
+      gap="spacingM"
+      css={{ flexWrap: 'wrap', rowGap: tokens.spacingS }}>
+      <Flex
+        flexDirection="column"
+        alignItems="flex-start"
+        css={css`
+          flex: 1 1 220px;
+          min-width: 0;
+          max-width: 100%;
+        `}>
+        <SelectionList
+          items={props.selectedItems}
+          itemsInfo={props.selectedData}
+          removeSelected={props.removeSelected}
+          fieldType={props.fieldType}
+        />
+        {props.selectionLimitMessage && (
+          <Text
+            as="p"
+            fontSize="fontSizeS"
+            css={css`
+              color: ${tokens.colorWarning};
+              margin-top: ${tokens.spacingXs};
+              margin-bottom: 0;
+            `}>
+            {props.selectionLimitMessage}
+          </Text>
+        )}
+      </Flex>
+      {props.showSaveButton !== false && (
+        <Button variant="primary" onClick={props.onSave} isDisabled={props.saveIsDisabled}>
+          Save
+        </Button>
+      )}
     </Flex>
   );
 };
@@ -173,7 +204,15 @@ const SelectionList = (props: SelectionListProps) => {
   };
 
   return (
-    <Flex gap="spacingXs" flexWrap="wrap" alignItems="center">
+    <Flex
+      gap="spacingXs"
+      flexWrap="wrap"
+      alignItems="center"
+      css={css`
+        flex: 1 1 220px;
+        min-width: 0;
+        max-width: 100%;
+      `}>
       {items &&
         items.map((itemId: string) => (
           <SelectionListItem

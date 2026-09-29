@@ -76,6 +76,8 @@ const SelectItemAction = (props: SelectItemActionProps) => {
     }
   }, [queriesComplete]);
 
+  const selectedCount = Array.isArray(props.fieldValue) ? props.fieldValue.length : 0;
+
   const makeCTAText = (selectMultiple: boolean, fieldType: string) => {
     let ctaText = 'Select ';
     if (selectMultiple) {
@@ -86,6 +88,10 @@ const SelectItemAction = (props: SelectItemActionProps) => {
 
     return ctaText;
   };
+
+  if (selectMultiple && selectedCount >= 24) {
+    return null;
+  }
 
   const onButtonClick = async () => {
     const parameters: DialogInvocationParameters = {

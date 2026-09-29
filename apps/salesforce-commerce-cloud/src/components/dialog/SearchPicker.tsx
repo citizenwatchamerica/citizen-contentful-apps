@@ -17,6 +17,54 @@ import { SiteMap, pruneSiteMap } from '../../utils/siteMap';
 export const headerHeight = 114;
 export const stickyHeaderBreakpoint = 900;
 export const height = window.outerHeight - window.outerHeight * 0.3 - headerHeight;
+export const MAX_PRODUCT_SELECTION = 24;
+
+export const getSelectedItems = (selected: string | string[] | undefined) => {
+  if (!selected) return [];
+  return typeof selected === 'string' ? [selected] : selected;
+};
+
+export const canAddSelectedProduct = (
+  fieldType: 'product' | 'category',
+  selectMultiple: boolean,
+  selected: string | string[] | undefined,
+  id: string,
+) => {
+  if (fieldType !== 'product' || !selectMultiple) {
+    return true;
+  }
+
+  const selectedItems = getSelectedItems(selected);
+  if (selectedItems.includes(id)) {
+    return true;
+  }
+
+  return selectedItems.length < MAX_PRODUCT_SELECTION;
+};
+
+export const hasReachedProductLimit = (
+  fieldType: 'product' | 'category',
+  selectMultiple: boolean,
+  selected: string | string[] | undefined,
+) => {
+  if (fieldType !== 'product' || !selectMultiple) {
+    return false;
+  }
+
+  return getSelectedItems(selected).length >= MAX_PRODUCT_SELECTION;
+};
+
+export const getProductSelectionLimitMessage = (
+  fieldType: 'product' | 'category',
+  selectMultiple: boolean,
+  selected: string | string[] | undefined,
+) => {
+  if (!hasReachedProductLimit(fieldType, selectMultiple, selected)) {
+    return undefined;
+  }
+
+  return `The storefront cannot display more than ${MAX_PRODUCT_SELECTION} selected products at once. Remove one before adding another.`;
+};
 
 const SearchPicker = () => {
   const sdk = useSDK<DialogAppSDK>();
@@ -62,6 +110,13 @@ const SearchPicker = () => {
 
   const onItemSelect = (id: string) => {
     if (selectMultiple) {
+      const selectedItems = getSelectedItems(selected);
+      const alreadySelected = selectedItems.includes(id);
+
+      if (!alreadySelected && !canAddSelectedProduct(fieldType, selectMultiple, selected, id)) {
+        return;
+      }
+
       // Multivalue
       if (!selected?.length) {
         // Empty array, Initial Value
@@ -71,7 +126,7 @@ const SearchPicker = () => {
       } else {
         // Array exists, modify it
 
-        const updateSelected = [...selected];
+        const updateSelected = [...selectedItems];
         let updateSelectedData = [];
         const includedIndex = updateSelected.findIndex((item) => item === id);
         if (includedIndex > -1) {
@@ -122,19 +177,29 @@ const SearchPicker = () => {
     return () => clearTimeout(timeOutId);
   }, [fieldType, query, installParameters, selectedSiteId]);
 
+  const selectionLimitMessage = getProductSelectionLimitMessage(
+    fieldType,
+    Boolean(selectMultiple),
+    selected,
+  );
+
+  const selectedItemCount = getSelectedItems(selected).length;
+
   const searchBarProps = {
     isLoading: queryIsFetching,
     query: query,
     onQueryChange: onQueryChange,
     onSave: onSave,
     stickyHeaderBreakpoint: stickyHeaderBreakpoint,
-    saveIsDisabled: !selected?.length,
+    saveIsDisabled: selectedItemCount > MAX_PRODUCT_SELECTION || !selectedItemCount,
     selectedItems: selected,
     selectedData: selectedData,
     removeSelected: onItemSelect,
     siteIds: siteIds,
     selectedSiteId: selectedSiteId,
     onSiteChange: onSiteChange,
+    selectionLimitMessage,
+    showSaveButton: selectedItemCount < MAX_PRODUCT_SELECTION + 1,
   };
 
   const SearchResultsComponent =
