@@ -54,6 +54,7 @@ describe('Sidebar component', () => {
     expect(mockSdk.dialogs.openCurrentApp).toHaveBeenCalledWith(
       expect.objectContaining({
         parameters: {
+          requiredLocales: ['en-US'],
           allowedLocales: ['en-US'],
           excludedLocales: ['en-GB'],
           localeStatus: { 'en-US': 'draft', 'en-GB': 'draft' },
@@ -63,6 +64,61 @@ describe('Sidebar component', () => {
     );
 
     await waitFor(() => expect(getByText('Published en-US.')).toBeTruthy());
+  });
+
+  it("adds the default locale to a regional editor's first publish of an entry they created", async () => {
+    mockSdk.user.spaceMembership = { admin: false, roles: [{ name: 'UK Editor' }] };
+    mockSdk.parameters.installation = { roleLocaleMap: { 'UK Editor': ['en-GB'] } };
+    mockSdk.entry.getSys.mockReturnValue({ version: 1, createdBy: { sys: { id: 'current-user' } } });
+    mockSdk.dialogs.openCurrentApp.mockResolvedValue(['en-US', 'en-GB']);
+
+    const { getByRole } = render(<Sidebar />);
+    fireEvent.click(getByRole('button', { name: 'Publish' }));
+
+    await waitFor(() => expect(mockSdk.dialogs.openCurrentApp).toHaveBeenCalledTimes(1));
+    expect(mockSdk.dialogs.openCurrentApp).toHaveBeenCalledWith(
+      expect.objectContaining({
+        parameters: expect.objectContaining({
+          requiredLocales: ['en-US'],
+          allowedLocales: ['en-US', 'en-GB'],
+          excludedLocales: [],
+        }),
+      })
+    );
+  });
+
+  it("doesn't add the default locale when a regional editor didn't create the entry", async () => {
+    mockSdk.user.spaceMembership = { admin: false, roles: [{ name: 'UK Editor' }] };
+    mockSdk.parameters.installation = { roleLocaleMap: { 'UK Editor': ['en-GB'] } };
+    mockSdk.entry.getSys.mockReturnValue({ version: 1, createdBy: { sys: { id: 'someone-else' } } });
+    mockSdk.dialogs.openCurrentApp.mockResolvedValue(null);
+
+    const { getByRole } = render(<Sidebar />);
+    fireEvent.click(getByRole('button', { name: 'Publish' }));
+
+    await waitFor(() => expect(mockSdk.dialogs.openCurrentApp).toHaveBeenCalledTimes(1));
+    const { parameters } = mockSdk.dialogs.openCurrentApp.mock.calls[0][0];
+    expect(parameters.allowedLocales).toEqual(['en-GB']);
+    expect(parameters.requiredLocales).toBeUndefined();
+  });
+
+  it("doesn't add the default locale once the entry has been published", async () => {
+    mockSdk.user.spaceMembership = { admin: false, roles: [{ name: 'UK Editor' }] };
+    mockSdk.parameters.installation = { roleLocaleMap: { 'UK Editor': ['en-GB'] } };
+    mockSdk.entry.getSys.mockReturnValue({
+      version: 5,
+      publishedVersion: 3,
+      createdBy: { sys: { id: 'current-user' } },
+    });
+    mockSdk.dialogs.openCurrentApp.mockResolvedValue(null);
+
+    const { getByRole } = render(<Sidebar />);
+    fireEvent.click(getByRole('button', { name: 'Publish' }));
+
+    await waitFor(() => expect(mockSdk.dialogs.openCurrentApp).toHaveBeenCalledTimes(1));
+    const { parameters } = mockSdk.dialogs.openCurrentApp.mock.calls[0][0];
+    expect(parameters.allowedLocales).toEqual(['en-GB']);
+    expect(parameters.requiredLocales).toBeUndefined();
   });
 
   it('shows the real error message when the CMA call rejects with a JSON-message Error', async () => {

@@ -48,6 +48,17 @@ describe('Dialog component', () => {
     expect(mockSdk.close).toHaveBeenCalledWith(['en-US']);
   });
 
+  it('locks required locales on and explains why', () => {
+    mockSdk.parameters.invocation = { ...mockSdk.parameters.invocation, requiredLocales: ['en-US'] };
+    const { getByText, container } = render(<Dialog />);
+
+    const requiredCheckbox = container.querySelector('#dialog-publish-en-US');
+    expect(requiredCheckbox).toHaveProperty('checked', true);
+    expect(requiredCheckbox).toHaveProperty('disabled', true);
+    expect(container.querySelector('#dialog-publish-en-GB')).toHaveProperty('disabled', false);
+    expect(getByText(/has to be included because this entry has never been published/)).toBeTruthy();
+  });
+
   it('in unpublish mode, starts with nothing checked and uses unpublish wording', () => {
     mockSdk.parameters.invocation = { ...mockSdk.parameters.invocation, mode: 'unpublish' };
     const { getByText, container } = render(<Dialog />);
