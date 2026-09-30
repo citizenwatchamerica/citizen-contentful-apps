@@ -56,7 +56,7 @@ describe('Dialog component', () => {
     expect(requiredCheckbox).toHaveProperty('checked', true);
     expect(requiredCheckbox).toHaveProperty('disabled', true);
     expect(container.querySelector('#dialog-publish-en-GB')).toHaveProperty('disabled', false);
-    expect(getByText(/has to be included because this entry has never been published/)).toBeTruthy();
+    expect(getByText(/has to be\s+included, either because this entry has never been published/)).toBeTruthy();
   });
 
   it('in unpublish mode, starts with nothing checked and uses unpublish wording', () => {

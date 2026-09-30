@@ -17,6 +17,9 @@ never accidentally ship another team's in-progress edits in a different locale.
 - **First publish**: Contentful requires an entry's first publish to include the default locale,
   so it's locked on in the dialog for that publish. A regional editor publishing a new entry they
   created themselves gets the default locale added even though their role doesn't cover it.
+- **Shared content types**: a content type with no localized fields keeps everything under the
+  default locale, so any regional editor publishes it with the default locale on every publish,
+  whoever created the entry.
 
 ## Local development
 

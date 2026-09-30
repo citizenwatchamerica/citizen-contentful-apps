@@ -29,6 +29,9 @@ const mockSdk: any = {
   parameters: {
     installation: { roleLocaleMap: {} },
   },
+  contentType: {
+    fields: [{ id: 'title', localized: true }],
+  },
   entry: {
     getSys: vi.fn().mockReturnValue({ version: 1 }),
     onSysChanged: vi.fn().mockReturnValue(() => {}),

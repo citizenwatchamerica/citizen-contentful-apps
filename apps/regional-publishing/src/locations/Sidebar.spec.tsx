@@ -13,6 +13,7 @@ describe('Sidebar component', () => {
     mockSdk.dialogs.openCurrentApp.mockReset();
     mockSdk.cma.entry.publish.mockClear();
     mockSdk.entry.getSys.mockReturnValue({ version: 1 });
+    mockSdk.contentType.fields = [{ id: 'title', localized: true }];
     mockSdk.entry.onSysChanged.mockReturnValue(() => {});
     mockSdk.cma.scheduledActions.getMany.mockReset().mockResolvedValue({ items: [] });
     mockSdk.cma.scheduledActions.create.mockReset().mockResolvedValue({ sys: { id: 'scheduled-1' } });
@@ -119,6 +120,29 @@ describe('Sidebar component', () => {
     const { parameters } = mockSdk.dialogs.openCurrentApp.mock.calls[0][0];
     expect(parameters.allowedLocales).toEqual(['en-GB']);
     expect(parameters.requiredLocales).toBeUndefined();
+  });
+
+  it('adds the default locale for any regional editor when the content type has no localized fields', async () => {
+    mockSdk.user.spaceMembership = { admin: false, roles: [{ name: 'UK Editor' }] };
+    mockSdk.parameters.installation = { roleLocaleMap: { 'UK Editor': ['en-GB'] } };
+    mockSdk.contentType.fields = [
+      { id: 'title', localized: false },
+      { id: 'image', localized: false },
+    ];
+    mockSdk.entry.getSys.mockReturnValue({
+      version: 5,
+      publishedVersion: 3,
+      createdBy: { sys: { id: 'someone-else' } },
+    });
+    mockSdk.dialogs.openCurrentApp.mockResolvedValue(null);
+
+    const { getByRole } = render(<Sidebar />);
+    fireEvent.click(getByRole('button', { name: 'Publish' }));
+
+    await waitFor(() => expect(mockSdk.dialogs.openCurrentApp).toHaveBeenCalledTimes(1));
+    const { parameters } = mockSdk.dialogs.openCurrentApp.mock.calls[0][0];
+    expect(parameters.allowedLocales).toEqual(['en-US', 'en-GB']);
+    expect(parameters.requiredLocales).toEqual(['en-US']);
   });
 
   it('shows the real error message when the CMA call rejects with a JSON-message Error', async () => {

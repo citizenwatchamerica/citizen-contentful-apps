@@ -102,7 +102,8 @@ const Dialog = () => {
       {requiredLocales.length > 0 && (
         <Note variant="neutral">
           {requiredLocales.map(locale => localeNames[locale] ?? locale).join(', ')} has to be
-          included because this entry has never been published before.
+          included, either because this entry has never been published or because its content is
+          shared by every region.
         </Note>
       )}
 

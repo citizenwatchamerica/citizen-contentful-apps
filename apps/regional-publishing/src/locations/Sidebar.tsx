@@ -188,11 +188,15 @@ const Sidebar = () => {
     // Contentful rejects an entry's first publish unless it includes the default locale, so it's
     // locked in for that publish - and a regional editor publishing a new entry they created
     // themselves gets it even though their role doesn't normally cover it.
+    // A content type with no localized fields keeps all its content under the default locale,
+    // so it's shared by every region: any editor publishes it with the default locale, every time.
     const { publishedVersion, createdBy } = sdk.entry.getSys();
-    const requiredLocales =
-      action === 'publish' &&
+    const isSharedContentType = !sdk.contentType.fields.some(field => field.localized);
+    const isFirstPublishAllowed =
       !publishedVersion &&
-      (allowedLocales.includes(sdk.locales.default) || createdBy?.sys.id === sdk.user.sys.id)
+      (allowedLocales.includes(sdk.locales.default) || createdBy?.sys.id === sdk.user.sys.id);
+    const requiredLocales =
+      action === 'publish' && (isSharedContentType || isFirstPublishAllowed)
         ? [sdk.locales.default]
         : [];
 
