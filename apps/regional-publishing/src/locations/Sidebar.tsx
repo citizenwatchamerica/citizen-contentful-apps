@@ -185,13 +185,24 @@ const Sidebar = () => {
       ...excludedLocales,
     ]);
 
+    // Contentful rejects an entry's first publish unless it includes the default locale, so it's
+    // locked in for that publish - and a regional editor publishing a new entry they created
+    // themselves gets it even though their role doesn't normally cover it.
+    const { publishedVersion, createdBy } = sdk.entry.getSys();
+    const requiredLocales =
+      action === 'publish' &&
+      !publishedVersion &&
+      (allowedLocales.includes(sdk.locales.default) || createdBy?.sys.id === sdk.user.sys.id)
+        ? [sdk.locales.default]
+        : [];
+
     // For unpublish, only regions that are actually live can be picked; the user's never-
     // published regions join the other teams' ones under "Not affected". A locale reads as
     // `draft` only when the status fetch succeeded and says so - if it failed, the map is
     // empty and every allowed locale stays pickable rather than hiding the whole list.
     const dialogLocales =
       action === 'publish'
-        ? allowedLocales
+        ? spaceLocales.filter(locale => allowedLocales.includes(locale) || requiredLocales.includes(locale))
         : allowedLocales.filter(locale => localeStatus[locale] !== 'draft');
     // Every locale live right now, across all teams. Empty when the status fetch failed.
     const liveLocales = spaceLocales.filter(
@@ -216,6 +227,7 @@ const Sidebar = () => {
           defaultLocale: sdk.locales.default,
           liveLocales,
         }),
+        ...(requiredLocales.length > 0 && { requiredLocales }),
         allowedLocales: dialogLocales,
         excludedLocales: spaceLocales.filter(locale => !dialogLocales.includes(locale)),
         localeStatus,

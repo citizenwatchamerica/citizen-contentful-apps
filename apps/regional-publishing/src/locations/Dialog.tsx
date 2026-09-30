@@ -21,6 +21,8 @@ interface DialogInvocationParams {
   // Unpublish only: the space default locale and every locale currently live (all teams').
   defaultLocale?: string;
   liveLocales?: string[];
+  // Publish only: locales that must go out with this publish and can't be unticked.
+  requiredLocales?: string[];
   allowedLocales: string[];
   excludedLocales: string[];
   localeStatus: Record<string, LocaleStatus>;
@@ -49,6 +51,7 @@ const Dialog = () => {
     mode = 'publish',
     defaultLocale,
     liveLocales = [],
+    requiredLocales = [],
     allowedLocales,
     excludedLocales,
     localeStatus,
@@ -86,6 +89,7 @@ const Dialog = () => {
             <Checkbox
               id={`dialog-${mode}-${locale}`}
               isChecked={selectedLocales.includes(locale)}
+              isDisabled={requiredLocales.includes(locale)}
               onChange={e => toggleLocale(locale, (e.target as HTMLInputElement).checked)}
             >
               {localeNames[locale] ?? locale}
@@ -94,6 +98,13 @@ const Dialog = () => {
           </Flex>
         ))}
       </Flex>
+
+      {requiredLocales.length > 0 && (
+        <Note variant="neutral">
+          {requiredLocales.map(locale => localeNames[locale] ?? locale).join(', ')} has to be
+          included because this entry has never been published before.
+        </Note>
+      )}
 
       {defaultLocaleBlocked && defaultLocale && (
         <Note variant="warning">

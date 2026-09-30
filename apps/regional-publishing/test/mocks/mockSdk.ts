@@ -20,6 +20,7 @@ const mockSdk: any = {
     names: { 'en-US': 'English (United States)', 'en-GB': 'English (United Kingdom)' },
   },
   user: {
+    sys: { id: 'current-user', type: 'User' },
     spaceMembership: {
       admin: false,
       roles: [],
