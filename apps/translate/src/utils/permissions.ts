@@ -12,6 +12,7 @@ export type RoleTranslationMap = Record<string, TranslationConfig[]>;
 // all switches installations into allowlist-only validation. So the map travels as a JSON
 // string rather than a nested object.
 export interface AppInstallationParameters {
+  openaiApiKey?: string;
   roleTranslationMap?: string;
 }
 
