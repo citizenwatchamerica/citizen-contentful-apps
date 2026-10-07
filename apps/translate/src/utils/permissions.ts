@@ -14,7 +14,16 @@ export type RoleTranslationMap = Record<string, TranslationConfig[]>;
 export interface AppInstallationParameters {
   openaiApiKey?: string;
   roleTranslationMap?: string;
+  // Newline-separated names the translator must leave exactly as written (brands, collections,
+  // collaborations). Shared by every role and locale pair.
+  protectedTerms?: string;
 }
+
+export const parseProtectedTerms = (raw: string | undefined): string[] =>
+  (raw ?? '')
+    .split(/\r?\n|,/)
+    .map(term => term.trim())
+    .filter(Boolean);
 
 const isValidConfig = (value: unknown): value is TranslationConfig => {
   const config = value as TranslationConfig | undefined;
@@ -72,4 +81,32 @@ export const getTranslationConfigs = (
   }
 
   return [];
+};
+
+export interface LabelledTranslationConfig extends TranslationConfig {
+  roles: string[];
+}
+
+// Bulk translation is admin-only, and admins can run any direction an admin has configured for
+// any role (rather than only Author (Global)'s fallback). Identical rules shared by several roles
+// are listed once, naming every role that has them.
+export const getAllTranslationConfigs = (
+  parameters: AppInstallationParameters | null
+): LabelledTranslationConfig[] => {
+  const roleTranslationMap = parseRoleTranslationMap(parameters?.roleTranslationMap);
+  const byRule = new Map<string, LabelledTranslationConfig>();
+
+  for (const [roleName, configs] of Object.entries(roleTranslationMap)) {
+    for (const config of configs) {
+      const key = JSON.stringify([config.source, config.target, config.guidance ?? '']);
+      const existing = byRule.get(key);
+      if (existing) {
+        existing.roles.push(roleName);
+      } else {
+        byRule.set(key, { ...config, roles: [roleName] });
+      }
+    }
+  }
+
+  return [...byRule.values()];
 };

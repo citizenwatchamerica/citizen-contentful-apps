@@ -107,4 +107,20 @@ describe('translateEntryFields', () => {
       'unexpected result shape'
     );
   });
+
+  it('leaves structural fields alone and sends every eligible field in one call', async () => {
+    const title = makeField({ id: 'title', name: 'Title', getValue: vi.fn(() => 'Hello') });
+    const subtitle = makeField({ id: 'subtitle', name: 'Subtitle', getValue: vi.fn(() => 'World') });
+    const externalLink = makeField({ id: 'externalLink', getValue: vi.fn(() => 'https://www.bulova.com') });
+    const categoryId = makeField({ id: 'categoryId', getValue: vi.fn(() => 'mens-watches') });
+    const sdk = makeSdk({ title, subtitle, externalLink, categoryId }, okResponse(['Hola', 'Mundo']));
+
+    const outcome = await translateEntryFields(sdk as any, config);
+
+    expect(outcome.map(field => field.fieldId)).toEqual(['title', 'subtitle']);
+    expect(externalLink.setValue).not.toHaveBeenCalled();
+    expect(categoryId.setValue).not.toHaveBeenCalled();
+    expect(sdk.cma.appActionCall.createWithResponse).toHaveBeenCalledTimes(1);
+  });
 });
+

@@ -16,7 +16,12 @@ import { DeleteIcon, PlusIcon } from '@contentful/f36-icons';
 import { useSDK } from '@contentful/react-apps-toolkit';
 import { css } from 'emotion';
 import { useCallback, useEffect, useState } from 'react';
-import { AppInstallationParameters, TranslationConfig, parseRoleTranslationMap } from '../utils/permissions';
+import {
+  AppInstallationParameters,
+  TranslationConfig,
+  parseProtectedTerms,
+  parseRoleTranslationMap,
+} from '../utils/permissions';
 
 interface Role {
   sys: { id: string };
@@ -75,6 +80,7 @@ const ConfigScreen = () => {
   const [roles, setRoles] = useState<Role[] | null>(null);
   const [roleTranslationMap, setRoleTranslationMap] = useState<Record<string, TranslationConfig[]>>({});
   const [openaiApiKey, setOpenaiApiKey] = useState('');
+  const [protectedTerms, setProtectedTerms] = useState('');
 
   const spaceLocales = sdk.locales.available;
   const localeNames = sdk.locales.names;
@@ -98,9 +104,10 @@ const ConfigScreen = () => {
     const parameters: AppInstallationParameters = {
       openaiApiKey: trimmedKey,
       roleTranslationMap: JSON.stringify(cleaned),
+      protectedTerms: parseProtectedTerms(protectedTerms).join('\n'),
     };
     return { parameters, targetState: currentState };
-  }, [sdk, roleTranslationMap, openaiApiKey]);
+  }, [sdk, roleTranslationMap, openaiApiKey, protectedTerms]);
 
   useEffect(() => {
     sdk.app.onConfigure(() => onConfigure());
@@ -110,6 +117,7 @@ const ConfigScreen = () => {
     (async () => {
       const parameters = (await sdk.app.getParameters()) as AppInstallationParameters | null;
       const savedMap = parseRoleTranslationMap(parameters?.roleTranslationMap);
+      setProtectedTerms(parameters?.protectedTerms ?? '');
 
       const { items } = await sdk.cma.role.getMany({});
       const fetchedRoles = items as Role[];
@@ -171,6 +179,20 @@ const ConfigScreen = () => {
           <FormControl.HelpText>
             Required every time you save. Contentful never shows the saved key, and saving without
             it would delete it.
+          </FormControl.HelpText>
+        </FormControl>
+
+        <FormControl id="protected-terms" marginBottom="spacingL">
+          <FormControl.Label>Protected terms</FormControl.Label>
+          <Textarea
+            rows={5}
+            value={protectedTerms}
+            onChange={e => setProtectedTerms(e.target.value)}
+            placeholder={'One per line, e.g.\nMarine Star\nPrecisionist'}
+          />
+          <FormControl.HelpText>
+            Brand, collection and collaboration names the translator must leave exactly as written,
+            for every role and locale pair.
           </FormControl.HelpText>
         </FormControl>
 
