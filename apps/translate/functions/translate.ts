@@ -17,18 +17,30 @@ type TranslatePayload = {
   sourceLocale: string;
   targetLocale: string;
   guidance?: string;
+  protectedTerms?: string[];
 };
 
 type InstallationParameters = {
   openaiApiKey?: string;
 };
 
-const buildSystemPrompt = (sourceLocale: string, targetLocale: string, guidance?: string): string =>
+const buildSystemPrompt = (
+  sourceLocale: string,
+  targetLocale: string,
+  guidance?: string,
+  protectedTerms: string[] = []
+): string =>
   [
     'You are a professional localization translator.',
     `Translate each string in the input JSON array from locale "${sourceLocale}" to locale "${targetLocale}".`,
     'Preserve meaning, tone, and any formatting characters (HTML tags, Markdown, punctuation) exactly.',
     'An empty string in the input must stay an empty string in the output - never invent content.',
+    'Do not translate or alter official brand, product, model, collection or collaboration names, ' +
+      'SKUs/model numbers, trademarks, URLs, codes or technical identifiers. Generic merchandising ' +
+      'text (e.g. "Women\'s Watches", "Best Sellers", "Shop the Collection") must still be localized.',
+    protectedTerms.length > 0
+      ? `Keep these names exactly as written wherever they appear: ${protectedTerms.join(', ')}.`
+      : '',
     guidance ? `Additional guidance: ${guidance}` : '',
     'Respond with ONLY a JSON object of the shape {"translations": string[]}, whose array has exactly ' +
       'the same length and order as the input array. Include no other text.',
@@ -52,7 +64,7 @@ export const handler: FunctionEventHandler<FunctionTypeEnum.AppActionCall> = asy
   } catch {
     throw new Error('Payload was not valid JSON.');
   }
-  const { texts, sourceLocale, targetLocale, guidance } = payload;
+  const { texts, sourceLocale, targetLocale, guidance, protectedTerms } = payload;
   const apiKey = context.appInstallationParameters?.openaiApiKey;
 
   if (!apiKey) {
@@ -73,7 +85,7 @@ export const handler: FunctionEventHandler<FunctionTypeEnum.AppActionCall> = asy
       temperature: 0.2,
       response_format: { type: 'json_object' },
       messages: [
-        { role: 'system', content: buildSystemPrompt(sourceLocale, targetLocale, guidance) },
+        { role: 'system', content: buildSystemPrompt(sourceLocale, targetLocale, guidance, protectedTerms) },
         { role: 'user', content: JSON.stringify({ texts }) },
       ],
     }),

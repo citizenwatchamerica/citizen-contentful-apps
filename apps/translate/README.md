@@ -18,6 +18,27 @@ then publish just your region.
   an App Action) that sends the batch of strings to OpenAI (`gpt-4o`) and returns the same-length
   translated array. Runs server-side so the OpenAI key never reaches the browser.
 
+## Bulk translation (Page location, space admins only)
+
+`src/locations/BulkPage.tsx` translates many entries at once: paste entry IDs, pick any
+direction configured for any role, run a **dry run** (plans every entry - no OpenAI calls, no
+writes), then run it for real. Unlike the sidebar it **never overwrites**: only target-locale
+fields with no explicitly stored value are filled (CMA entries never contain fallback values, so
+fallback is never mistaken for a translation). Entries are processed 3 at a time, written with
+their current version (re-read and re-planned on a version conflict), and never published. A
+failed entry is reported and the batch continues. Results download as CSV.
+
+Shared building blocks, used by both the sidebar and the bulk page:
+
+- `src/utils/fieldEligibility.ts` - the single list of rules for what is never translated
+  (identifiers, URLs, SFCC/connector fields, custom-app editors, layout settings, fixed-value
+  fields, and values that look like URLs, emails or codes). Edit rules here only.
+- `src/utils/translateClient.ts` - the App Action call, chunked and retried.
+- `src/utils/bulkTranslate.ts` - entry loading, planning, per-entry execution, CSV.
+
+Protected terms (config screen) are sent with every call and kept verbatim by the model, on top
+of a fixed instruction not to alter brand/product/collection names, SKUs, URLs or codes.
+
 ## Local development
 
 ```bash
@@ -53,7 +74,7 @@ npm run upsert-actions
 
 ## Installation parameters
 
-The App Definition declares two installation parameters (`parameters.installation` — declaring
+The App Definition declares three installation parameters (`parameters.installation` — declaring
 any schema switches an installation into allowlist-only validation, so both live here even though
 only one is secret):
 
@@ -61,6 +82,7 @@ only one is secret):
   `context.appInstallationParameters`. Required, and must be sent on **every** save: Contentful
   only returns a Secret masked, and an installation update that omits it deletes the stored key.
   The Config screen therefore asks for the key each time and refuses to save without it.
+- `protectedTerms` (`Symbol`, optional) - newline-separated names to keep verbatim.
 - `roleTranslationMap` (`Symbol`) — a JSON-stringified `Record<roleName, {source, target,
   guidance}>`. Stored as a string because Contentful's installation-parameter types are limited to
   `Boolean | Symbol | Number | Enum | Secret` — there's no nested-object type. The Config screen
