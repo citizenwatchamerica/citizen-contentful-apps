@@ -197,8 +197,8 @@ const BulkPage = () => {
         never touched, and nothing is published.
       </Paragraph>
 
-      <Flex gap="spacingL" alignItems="flex-start" marginBottom="spacingL">
-        <FormControl id="bulk-rule" marginBottom="none" className={css({ minWidth: '360px' })}>
+      <Flex flexDirection="column" gap="spacingL" marginBottom="spacingL" className={css({ maxWidth: '800px' })}>
+        <FormControl id="bulk-rule" marginBottom="none">
           <FormControl.Label>Translation direction</FormControl.Label>
           <Select
             value={String(selectedIndex)}
@@ -217,7 +217,7 @@ const BulkPage = () => {
           {config.guidance && <FormControl.HelpText>Guidance: {config.guidance}</FormControl.HelpText>}
         </FormControl>
 
-        <FormControl id="bulk-entry-ids" marginBottom="none" className={css({ flex: 1 })}>
+        <FormControl id="bulk-entry-ids" marginBottom="none">
           <FormControl.Label>Entry IDs</FormControl.Label>
           <Textarea
             rows={6}
