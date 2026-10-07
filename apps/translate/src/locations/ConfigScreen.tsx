@@ -9,6 +9,7 @@ import {
   Paragraph,
   Select,
   Subheading,
+  TextInput,
   Textarea,
 } from '@contentful/f36-components';
 import { DeleteIcon, PlusIcon } from '@contentful/f36-icons';
@@ -73,6 +74,7 @@ const ConfigScreen = () => {
 
   const [roles, setRoles] = useState<Role[] | null>(null);
   const [roleTranslationMap, setRoleTranslationMap] = useState<Record<string, TranslationConfig[]>>({});
+  const [openaiApiKey, setOpenaiApiKey] = useState('');
 
   const spaceLocales = sdk.locales.available;
   const localeNames = sdk.locales.names;
@@ -86,9 +88,19 @@ const ConfigScreen = () => {
       const valid = configs.filter(c => c.source && c.target);
       if (valid.length > 0) cleaned[roleName] = valid;
     }
-    const parameters: AppInstallationParameters = { roleTranslationMap: JSON.stringify(cleaned) };
+    // openaiApiKey is a Secret: Contentful only ever hands it back masked, and a save that omits
+    // it deletes the stored key. So every save has to carry the real key, re-entered here.
+    const trimmedKey = openaiApiKey.trim();
+    if (!trimmedKey) {
+      sdk.notifier.error('Enter the OpenAI API key to save. It is required on every save.');
+      return false;
+    }
+    const parameters: AppInstallationParameters = {
+      openaiApiKey: trimmedKey,
+      roleTranslationMap: JSON.stringify(cleaned),
+    };
     return { parameters, targetState: currentState };
-  }, [sdk, roleTranslationMap]);
+  }, [sdk, roleTranslationMap, openaiApiKey]);
 
   useEffect(() => {
     sdk.app.onConfigure(() => onConfigure());
@@ -146,6 +158,21 @@ const ConfigScreen = () => {
           with no rules won't see the Translate button. Roles with more than one rule get a picker
           in the sidebar to choose which direction to run.
         </Paragraph>
+
+        <FormControl id="openai-api-key" marginBottom="spacingL">
+          <FormControl.Label isRequired>OpenAI API key</FormControl.Label>
+          <TextInput
+            type="password"
+            autoComplete="off"
+            value={openaiApiKey}
+            onChange={e => setOpenaiApiKey(e.target.value)}
+            placeholder="sk-…"
+          />
+          <FormControl.HelpText>
+            Required every time you save. Contentful never shows the saved key, and saving without
+            it would delete it.
+          </FormControl.HelpText>
+        </FormControl>
 
         {roles === null && <Paragraph>Loading roles…</Paragraph>}
 

@@ -58,7 +58,9 @@ any schema switches an installation into allowlist-only validation, so both live
 only one is secret):
 
 - `openaiApiKey` (`Secret`) — redacted everywhere except inside the Function's
-  `context.appInstallationParameters`. Required.
+  `context.appInstallationParameters`. Required, and must be sent on **every** save: Contentful
+  only returns a Secret masked, and an installation update that omits it deletes the stored key.
+  The Config screen therefore asks for the key each time and refuses to save without it.
 - `roleTranslationMap` (`Symbol`) — a JSON-stringified `Record<roleName, {source, target,
   guidance}>`. Stored as a string because Contentful's installation-parameter types are limited to
   `Boolean | Symbol | Number | Enum | Secret` — there's no nested-object type. The Config screen
