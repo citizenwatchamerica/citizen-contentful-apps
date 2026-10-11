@@ -8,6 +8,8 @@ beforeEach(() => {
   vi.useFakeTimers();
   vi.resetModules();
   mockGetFailedUpdateIds.mockReturnValue([]);
+  mockGetClonedAssetCount.mockResolvedValue(0);
+  mockGetRemovedAssetLinkCount.mockReturnValue(0);
 });
 
 afterEach(() => {
@@ -22,6 +24,8 @@ vi.mock('@contentful/react-apps-toolkit', () => ({
 
 const mockCloneEntry = vi.fn();
 const mockGetFailedUpdateIds = vi.fn().mockReturnValue([]);
+const mockGetClonedAssetCount = vi.fn().mockResolvedValue(0);
+const mockGetRemovedAssetLinkCount = vi.fn().mockReturnValue(0);
 
 vi.mock('../../src/utils/EntryCloner', () => {
   return {
@@ -59,6 +63,8 @@ vi.mock('../../src/utils/EntryCloner', () => {
             return { sys: { id: 'cloned-id' } };
           }),
           getFailedUpdateIds: mockGetFailedUpdateIds,
+          getClonedAssetCount: mockGetClonedAssetCount,
+          getRemovedAssetLinkCount: mockGetRemovedAssetLinkCount,
         })
       ),
   };
@@ -161,6 +167,23 @@ describe('Sidebar component', () => {
     ).toBeDefined();
     expect(mockSdk.notifier.success).toHaveBeenCalledWith('Clone successful');
     expect(mockSdk.notifier.error).not.toHaveBeenCalled();
+  });
+
+  it('shows media warning Note and cloned asset count after cloning', async () => {
+    mockGetClonedAssetCount.mockResolvedValue(1);
+    mockGetRemovedAssetLinkCount.mockReturnValue(2);
+
+    const { getByText } = render(<Sidebar />);
+    await act(async () => {
+      fireEvent.click(getByText('Clone entry'));
+    });
+
+    expect(getByText('Cloned 1 asset.')).toBeDefined();
+    expect(
+      getByText(
+        'Removed 2 media links from the clone because the media was not cloned. Add new media before publishing.'
+      )
+    ).toBeDefined();
   });
 
   it('opens selection dialog before cloning and passes selected entry ids', async () => {

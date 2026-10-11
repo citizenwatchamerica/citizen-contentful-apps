@@ -1,9 +1,14 @@
-import { ContentTypeProps, CreateEntryProps, EntryProps } from 'contentful-management';
+import { AssetProps, ContentTypeProps, CreateEntryProps, EntryProps } from 'contentful-management';
 import { CMAClient } from '@contentful/app-sdk';
 import { AppParameters } from '@/vite-env';
 
 type ReferenceMap = Record<string, EntryProps>;
 type ReferenceChildrenMap = Record<string, string[]>;
+type ClonedAssetIdMap = Record<string, string | null>;
+
+// Image Focal Point coordinates are relative to the linked image, so they are stale once it is removed
+const FOCAL_POINT_FIELD_ID = 'focalPoint';
+const ASSET_PROCESSING_OPTIONS = { processingCheckWait: 2000, processingCheckRetries: 15 };
 
 export type CloneReferenceNode = {
   entryId: string;
@@ -33,6 +38,8 @@ class EntryCloner {
   private clones: ReferenceMap = {};
   private failedCloneIds: string[] = [];
   private failedUpdateIds: string[] = [];
+  private assetClones: Record<string, Promise<string | null>> = {};
+  private removedAssetLinkCount: number = 0;
   private referenceChildren: ReferenceChildrenMap = {};
   private discoveryOrder: string[] = [];
   private discoveryDepths: Record<string, number> = {};
@@ -84,6 +91,15 @@ class EntryCloner {
 
   getFailedUpdateIds(): string[] {
     return this.failedUpdateIds;
+  }
+
+  async getClonedAssetCount(): Promise<number> {
+    const clonedAssetIds = await Promise.all(Object.values(this.assetClones));
+    return clonedAssetIds.filter((clonedAssetId) => clonedAssetId !== null).length;
+  }
+
+  getRemovedAssetLinkCount(): number {
+    return this.removedAssetLinkCount;
   }
 
   async getReferencesQty(): Promise<number> {
@@ -321,13 +337,180 @@ class EntryCloner {
       const titleFieldValues = entryFields[titleField.id];
       for (const locale in titleFieldValues) {
         const title = titleFieldValues[locale];
-        titleFieldValues[locale] = this.parameters.cloneTextBefore
-          ? `${this.parameters.cloneText} ${title}`
-          : `${title} ${this.parameters.cloneText}`;
+        titleFieldValues[locale] = this.applyCloneText(title);
       }
     }
 
+    await this.replaceAssetLinks(entryFields);
+
     return entryFields;
+  }
+
+  private applyCloneText(title: string): string {
+    return this.parameters.cloneTextBefore
+      ? `${this.parameters.cloneText} ${title}`
+      : `${title} ${this.parameters.cloneText}`;
+  }
+
+  // Assets are cloned so edits to a clone's media can't change the original; links to assets that fail to clone are removed
+  private async replaceAssetLinks(entryFields: any): Promise<void> {
+    const assetIds = new Set<string>();
+    this.collectAssetIds(entryFields, assetIds);
+    if (assetIds.size === 0) return;
+
+    const clonedAssetIds: ClonedAssetIdMap = {};
+    await Promise.all(
+      [...assetIds].map(async (assetId) => {
+        clonedAssetIds[assetId] = await this.getAssetClone(assetId);
+      })
+    );
+
+    let removedCount = 0;
+    for (const fieldId of Object.keys(entryFields)) {
+      const field = entryFields[fieldId];
+      for (const locale of Object.keys(field)) {
+        const fieldValue = field[locale];
+        if (this.isAssetReference(fieldValue)) {
+          const clonedAssetId = clonedAssetIds[fieldValue.sys.id];
+          if (clonedAssetId) {
+            fieldValue.sys.id = clonedAssetId;
+          } else {
+            delete field[locale];
+            removedCount++;
+          }
+        } else {
+          removedCount += this.replaceNestedAssetLinks(fieldValue, clonedAssetIds);
+        }
+      }
+      if (Object.keys(field).length === 0) {
+        delete entryFields[fieldId];
+      }
+    }
+
+    if (removedCount > 0) {
+      delete entryFields[FOCAL_POINT_FIELD_ID];
+      this.removedAssetLinkCount += removedCount;
+    }
+  }
+
+  private collectAssetIds(fieldValue: any, assetIds: Set<string>): void {
+    if (!this.isObject(fieldValue)) return;
+
+    if (this.isAssetReference(fieldValue)) {
+      assetIds.add(fieldValue.sys.id);
+      return;
+    }
+
+    for (const value of Object.values(fieldValue)) {
+      this.collectAssetIds(value, assetIds);
+    }
+  }
+
+  private getNestedAssetLink(value: any): any {
+    if (this.isAssetReference(value)) return value;
+    // Rich text embedded-asset-block nodes hold the link in data.target
+    if (this.isObject(value) && this.isAssetReference(value.data?.target)) return value.data.target;
+    return null;
+  }
+
+  private replaceNestedAssetLinks(fieldValue: any, clonedAssetIds: ClonedAssetIdMap): number {
+    if (!this.isObject(fieldValue)) return 0;
+
+    let removedCount = 0;
+
+    if (Array.isArray(fieldValue)) {
+      for (let index = fieldValue.length - 1; index >= 0; index--) {
+        const assetLink = this.getNestedAssetLink(fieldValue[index]);
+        if (!assetLink) {
+          removedCount += this.replaceNestedAssetLinks(fieldValue[index], clonedAssetIds);
+          continue;
+        }
+
+        const clonedAssetId = clonedAssetIds[assetLink.sys.id];
+        if (clonedAssetId) {
+          assetLink.sys.id = clonedAssetId;
+        } else {
+          fieldValue.splice(index, 1);
+          removedCount++;
+        }
+      }
+      return removedCount;
+    }
+
+    for (const [key, value] of Object.entries(fieldValue)) {
+      if (!this.isAssetReference(value)) {
+        removedCount += this.replaceNestedAssetLinks(value, clonedAssetIds);
+        continue;
+      }
+
+      const assetLink = value as any;
+      const clonedAssetId = clonedAssetIds[assetLink.sys.id];
+      if (clonedAssetId) {
+        assetLink.sys.id = clonedAssetId;
+      } else {
+        delete fieldValue[key];
+        removedCount++;
+      }
+    }
+    return removedCount;
+  }
+
+  private getAssetClone(assetId: string): Promise<string | null> {
+    // Memoized so an asset shared by several cloned entries is only duplicated once
+    this.assetClones[assetId] ||= this.cloneAsset(assetId).catch((error) => {
+      console.warn('Error cloning asset, its links will be removed from the clone', error);
+      return null;
+    });
+    return this.assetClones[assetId];
+  }
+
+  private async cloneAsset(assetId: string): Promise<string> {
+    const asset = await this.cma.asset.get({ assetId });
+
+    const uploadFields: Record<string, { contentType: string; fileName: string; upload: string }> =
+      {};
+    for (const [locale, file] of Object.entries(asset.fields.file || {})) {
+      if (!file?.url) continue;
+      uploadFields[locale] = {
+        contentType: file.contentType,
+        fileName: file.fileName,
+        upload: file.url.startsWith('//') ? `https:${file.url}` : file.url,
+      };
+    }
+    if (Object.keys(uploadFields).length === 0) {
+      throw new Error(`Asset ${assetId} has no processed file to clone`);
+    }
+
+    const titleFields: Record<string, string> = {};
+    for (const [locale, title] of Object.entries(asset.fields.title || {})) {
+      titleFields[locale] = this.applyCloneText(title);
+    }
+
+    const createdAsset: AssetProps = await this.cma.asset.create(
+      {},
+      {
+        fields: {
+          title: titleFields,
+          ...(asset.fields.description ? { description: asset.fields.description } : {}),
+          file: uploadFields as any,
+        },
+        ...(asset.metadata ? { metadata: asset.metadata } : {}),
+      }
+    );
+
+    try {
+      const processedAsset = await this.cma.asset.processForAllLocales(
+        {},
+        createdAsset,
+        ASSET_PROCESSING_OPTIONS
+      );
+      return processedAsset.sys.id;
+    } catch (error) {
+      await this.cma.asset
+        .delete({ assetId: createdAsset.sys.id })
+        .catch((deleteError) => console.warn('Error deleting unprocessed asset', deleteError));
+      throw error;
+    }
   }
 
   private async getContentType(contentTypeId: string): Promise<ContentTypeProps> {
@@ -402,6 +585,14 @@ class EntryCloner {
 
   private isReference(fieldValue: any): boolean {
     return fieldValue.sys && fieldValue.sys.type === 'Link' && fieldValue.sys.linkType === 'Entry';
+  }
+
+  private isAssetReference(fieldValue: any): boolean {
+    return (
+      this.isObject(fieldValue) &&
+      fieldValue.sys?.type === 'Link' &&
+      fieldValue.sys?.linkType === 'Asset'
+    );
   }
 
   private isObject(fieldValue: any): boolean {

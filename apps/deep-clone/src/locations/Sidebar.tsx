@@ -14,6 +14,8 @@ function Sidebar() {
   const [referencesCount, setReferencesCount] = useState<number>(0);
   const [clonesCount, setClonesCount] = useState<number>(0);
   const [updatesCount, setUpdatesCount] = useState<number>(0);
+  const [clonedAssetCount, setClonedAssetCount] = useState<number>(0);
+  const [removedAssetLinkCount, setRemovedAssetLinkCount] = useState<number>(0);
   const [countdown, setCountdown] = useState<number>(0);
   const parameters = useInstallationParameters(sdk) as AppParameters;
 
@@ -50,6 +52,8 @@ function Sidebar() {
     setReferencesCount(0);
     setClonesCount(0);
     setUpdatesCount(0);
+    setClonedAssetCount(0);
+    setRemovedAssetLinkCount(0);
     setCloneError(null);
     setCloneWarning(null);
     discoveryAbortControllerRef.current = null;
@@ -136,6 +140,9 @@ function Sidebar() {
       );
     }
 
+    setClonedAssetCount(await cloner.getClonedAssetCount());
+    setRemovedAssetLinkCount(cloner.getRemovedAssetLinkCount());
+
     setIsCloning(false);
     setIsFinished(true);
 
@@ -201,9 +208,21 @@ function Sidebar() {
             <Text fontColor="gray500" fontWeight="fontWeightMedium">
               {`Updated ${updatesCount} ${updatesCount === 1 ? 'reference' : 'references'}.`}
             </Text>
+            {clonedAssetCount > 0 && (
+              <Text fontColor="gray500" fontWeight="fontWeightMedium">
+                {`Cloned ${clonedAssetCount} ${clonedAssetCount === 1 ? 'asset' : 'assets'}.`}
+              </Text>
+            )}
           </>
         )}
       </Stack>
+      {removedAssetLinkCount > 0 && (
+        <Note variant="warning" style={{ width: '100%' }}>
+          {`Removed ${removedAssetLinkCount} media ${
+            removedAssetLinkCount === 1 ? 'link' : 'links'
+          } from the clone because the media was not cloned. Add new media before publishing.`}
+        </Note>
+      )}
       {isRedirecting && parameters.automaticRedirect && (
         <Text fontColor="gray500" fontWeight="fontWeightMedium">
           Redirecting to newly created clone in {countdown} seconds

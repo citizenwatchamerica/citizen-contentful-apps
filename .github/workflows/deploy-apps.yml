@@ -8,6 +8,7 @@ on:
         required: true
         type: choice
         options:
+          - deep-clone
           - html-field-editor
           - salesforce-commerce-cloud
           - regional-publishing
@@ -34,6 +35,7 @@ jobs:
         run: |
           # Map: app directory name -> GitHub secret suffix for CONTENTFUL_APP_DEF_ID_*
           declare -A APPS=(
+            ["deep-clone"]="DEEP_CLONE"
             ["html-field-editor"]="HTML_FIELD_EDITOR"
             ["salesforce-commerce-cloud"]="SALESFORCE_COMMERCE_CLOUD"
             ["regional-publishing"]="REGIONAL_PUBLISHING"

@@ -908,4 +908,168 @@ describe('EntryCloner', () => {
       ).rejects.toBeInstanceOf(ReferenceDiscoveryAbortedError);
     });
   });
+
+  describe('Clone entry with asset links', () => {
+    const assetLink = (id: string) => ({ sys: { type: 'Link', linkType: 'Asset', id } });
+
+    const originalAsset = {
+      sys: { id: 'original-asset-id' },
+      fields: {
+        title: { 'en-US': 'Hero image' },
+        file: {
+          'en-US': {
+            url: '//images.ctfassets.net/space/original-asset-id/hash/hero.jpg',
+            fileName: 'hero.jpg',
+            contentType: 'image/jpeg',
+          },
+        },
+      },
+    };
+
+    let assetEntry: any;
+
+    beforeEach(() => {
+      mockCma.asset.get.mockReset();
+      mockCma.asset.create.mockReset();
+      mockCma.asset.processForAllLocales.mockReset();
+      mockCma.asset.delete.mockReset();
+
+      mockCma.contentType.get.mockResolvedValue(
+        getMockContentType([
+          { id: 'title', type: 'Symbol' },
+          { id: 'image', type: 'Link', linkType: 'Asset' },
+          { id: 'focalPoint', type: 'Object' },
+          { id: 'gallery', type: 'Array', items: { type: 'Link', linkType: 'Asset' } },
+          { id: 'body', type: 'RichText' },
+        ])
+      );
+
+      assetEntry = getMockEntry('main-entry-id', {
+        title: { 'en-US': 'Image With Focal Point' },
+        image: { 'en-US': assetLink('original-asset-id') },
+        focalPoint: { 'en-US': { focalPoint: { x: 100, y: 200 } } },
+        gallery: { 'en-US': [assetLink('original-asset-id')] },
+        body: {
+          'en-US': {
+            nodeType: 'document',
+            data: {},
+            content: [
+              { nodeType: 'paragraph', data: {}, content: [] },
+              {
+                nodeType: 'embedded-asset-block',
+                data: { target: assetLink('original-asset-id') },
+                content: [],
+              },
+            ],
+          },
+        },
+      });
+
+      mockCma.entry.get.mockResolvedValue(assetEntry);
+      mockCma.entry.create.mockImplementation(async (_params, props) =>
+        getMockEntry('cloned-main-entry-id', props.fields)
+      );
+    });
+
+    it('removes asset links and the focal point when the asset cannot be fetched', async () => {
+      mockCma.asset.get.mockRejectedValue(new Error('NotFound'));
+
+      await entryCloner.cloneEntry();
+
+      expect(mockCma.asset.create).not.toHaveBeenCalled();
+      expect(mockCma.entry.create).toHaveBeenCalledWith(
+        { contentTypeId: 'testContentType' },
+        {
+          fields: {
+            title: { 'en-US': '[CLONE] Image With Focal Point' },
+            gallery: { 'en-US': [] },
+            body: {
+              'en-US': {
+                nodeType: 'document',
+                data: {},
+                content: [{ nodeType: 'paragraph', data: {}, content: [] }],
+              },
+            },
+          },
+        }
+      );
+    });
+
+    it('reports how many asset links were removed', async () => {
+      mockCma.asset.get.mockRejectedValue(new Error('NotFound'));
+
+      await entryCloner.cloneEntry();
+
+      expect(entryCloner.getRemovedAssetLinkCount()).toBe(3);
+      expect(await entryCloner.getClonedAssetCount()).toBe(0);
+    });
+
+    it('does not modify the original entry fields', async () => {
+      mockCma.asset.get.mockRejectedValue(new Error('NotFound'));
+
+      await entryCloner.cloneEntry();
+
+      expect(assetEntry.fields.image['en-US']).toEqual(assetLink('original-asset-id'));
+      expect(assetEntry.fields.focalPoint['en-US']).toEqual({ focalPoint: { x: 100, y: 200 } });
+    });
+
+    it('clones the asset once and repoints every link to the copy', async () => {
+      mockCma.asset.get.mockResolvedValue(originalAsset);
+      mockCma.asset.create.mockResolvedValue({ sys: { id: 'cloned-asset-id' } });
+      mockCma.asset.processForAllLocales.mockResolvedValue({ sys: { id: 'cloned-asset-id' } });
+
+      await entryCloner.cloneEntry();
+
+      expect(mockCma.asset.create).toHaveBeenCalledTimes(1);
+      expect(mockCma.asset.create).toHaveBeenCalledWith(
+        {},
+        {
+          fields: {
+            title: { 'en-US': '[CLONE] Hero image' },
+            file: {
+              'en-US': {
+                contentType: 'image/jpeg',
+                fileName: 'hero.jpg',
+                upload: 'https://images.ctfassets.net/space/original-asset-id/hash/hero.jpg',
+              },
+            },
+          },
+        }
+      );
+
+      const createdFields = mockCma.entry.create.mock.calls[0][1].fields;
+      expect(createdFields.image['en-US']).toEqual(assetLink('cloned-asset-id'));
+      expect(createdFields.gallery['en-US']).toEqual([assetLink('cloned-asset-id')]);
+      expect(createdFields.body['en-US'].content[1].data.target).toEqual(
+        assetLink('cloned-asset-id')
+      );
+      expect(createdFields.focalPoint['en-US']).toEqual({ focalPoint: { x: 100, y: 200 } });
+      expect(entryCloner.getRemovedAssetLinkCount()).toBe(0);
+      expect(await entryCloner.getClonedAssetCount()).toBe(1);
+    });
+
+    it('removes asset links and deletes the partial asset when processing fails', async () => {
+      mockCma.asset.get.mockResolvedValue(originalAsset);
+      mockCma.asset.create.mockResolvedValue({ sys: { id: 'cloned-asset-id' } });
+      mockCma.asset.processForAllLocales.mockRejectedValue(new Error('Processing timed out'));
+      mockCma.asset.delete.mockResolvedValue(undefined);
+
+      await entryCloner.cloneEntry();
+
+      expect(mockCma.asset.delete).toHaveBeenCalledWith({ assetId: 'cloned-asset-id' });
+      const createdFields = mockCma.entry.create.mock.calls[0][1].fields;
+      expect(createdFields.image).toBeUndefined();
+      expect(createdFields.focalPoint).toBeUndefined();
+      expect(entryCloner.getRemovedAssetLinkCount()).toBe(3);
+    });
+
+    it('removes asset links when the asset has no file', async () => {
+      mockCma.asset.get.mockResolvedValue({ sys: { id: 'original-asset-id' }, fields: {} });
+
+      await entryCloner.cloneEntry();
+
+      expect(mockCma.asset.create).not.toHaveBeenCalled();
+      expect(mockCma.entry.create.mock.calls[0][1].fields.image).toBeUndefined();
+    });
+  });
 });

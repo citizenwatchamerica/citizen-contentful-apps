@@ -46,3 +46,4 @@ src/
 - **Never** remove cycle detection from the reference traversal — it will loop infinitely on circular content models.
 - **Never** clone assets — only entries should be cloned; asset links should be preserved by reference.
 - **Always** show progress to the user during long clone operations.
+- **Assets (Citizen fork)**: a clone must never link to the original's assets. `EntryCloner.replaceAssetLinks` repoints links to duplicated assets, removes links to assets that fail to duplicate, and clears `focalPoint` on any entry that lost an asset link. Keep this when merging upstream changes.
