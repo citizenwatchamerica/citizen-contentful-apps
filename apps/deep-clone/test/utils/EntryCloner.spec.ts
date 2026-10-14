@@ -1,0 +1,1075 @@
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { mockCma } from '../mocks';
+import EntryCloner, { ReferenceDiscoveryAbortedError } from '../../src/utils/EntryCloner';
+import type { AppParameters } from '../../src/vite-env';
+import { getMockContentType, getMockEntry } from './EntryClonerTestUtils';
+
+vi.mock('@contentful/app-sdk', () => ({
+  CMAClient: vi.fn().mockImplementation(() => mockCma),
+}));
+
+const setReferencesCount = vi.fn();
+const setClonesCount = vi.fn();
+const setUpdatesCount = vi.fn();
+
+describe('EntryCloner', () => {
+  let entryCloner: EntryCloner;
+  let mockParameters: AppParameters;
+  let contentType: any;
+  let referencedEntry: any;
+  let mainEntry: any;
+  let clonedReferencedEntry: any;
+  let clonedMainEntry: any;
+  let updatedMainEntry: any;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockCma.contentType.get.mockReset();
+    mockCma.entry.get.mockReset();
+    mockCma.entry.create.mockReset();
+    mockCma.entry.update.mockReset();
+
+    mockParameters = {
+      cloneText: '[CLONE]',
+      cloneTextBefore: true,
+      automaticRedirect: true,
+    };
+    entryCloner = new EntryCloner(
+      mockCma as any,
+      mockParameters,
+      'main-entry-id',
+      setReferencesCount,
+      setClonesCount,
+      setUpdatesCount
+    );
+  });
+
+  describe('Clone entry with reference field', () => {
+    beforeEach(() => {
+      contentType = getMockContentType([
+        { id: 'title', type: 'Text' },
+        { id: 'reference', type: 'Link', linkType: 'Entry' },
+      ]);
+
+      referencedEntry = getMockEntry('referenced-entry-id', {
+        title: { 'en-US': 'Referenced Entry Title' },
+      });
+
+      mainEntry = getMockEntry('main-entry-id', {
+        title: { 'en-US': 'Main Entry Title' },
+        reference: {
+          'en-US': {
+            sys: { type: 'Link', linkType: 'Entry', id: 'referenced-entry-id' },
+          },
+        },
+      });
+
+      clonedReferencedEntry = getMockEntry('cloned-referenced-entry-id', {
+        title: { 'en-US': '[CLONE] Referenced Entry Title' },
+      });
+
+      clonedMainEntry = getMockEntry('cloned-main-entry-id', {
+        title: { 'en-US': '[CLONE] Main Entry Title' },
+        reference: {
+          'en-US': {
+            sys: { type: 'Link', linkType: 'Entry', id: 'referenced-entry-id' },
+          },
+        },
+      });
+
+      updatedMainEntry = getMockEntry('cloned-main-entry-id', {
+        title: { 'en-US': '[CLONE] Main Entry Title' },
+        reference: {
+          'en-US': {
+            sys: { type: 'Link', linkType: 'Entry', id: 'cloned-referenced-entry-id' },
+          },
+        },
+      });
+    });
+
+    it('should clone an entry with one text field and a reference field', async () => {
+      mockCma.contentType.get.mockResolvedValue(contentType);
+      mockCma.entry.get.mockResolvedValueOnce(mainEntry).mockResolvedValueOnce(referencedEntry);
+      mockCma.entry.create
+        .mockResolvedValueOnce(clonedMainEntry)
+        .mockResolvedValueOnce(clonedReferencedEntry);
+      mockCma.entry.update.mockResolvedValueOnce(updatedMainEntry);
+      const result = await entryCloner.cloneEntry();
+      expect(result).toEqual(updatedMainEntry);
+      expect(setReferencesCount).toHaveBeenCalledWith(2);
+      expect(setClonesCount).toHaveBeenCalledWith(2);
+      expect(setUpdatesCount).toHaveBeenCalledWith(1);
+
+      expect(mockCma.entry.get).toHaveBeenCalledTimes(2);
+      expect(mockCma.entry.get).toHaveBeenCalledWith({ entryId: 'main-entry-id' });
+      expect(mockCma.entry.get).toHaveBeenCalledWith({ entryId: 'referenced-entry-id' });
+      expect(mockCma.entry.create).toHaveBeenCalledTimes(2);
+      expect(mockCma.entry.update).toHaveBeenCalledTimes(1);
+
+      expect(mockCma.entry.create).toHaveBeenNthCalledWith(
+        1,
+        { contentTypeId: 'testContentType' },
+        {
+          fields: {
+            title: { 'en-US': '[CLONE] Main Entry Title' },
+            reference: {
+              'en-US': {
+                sys: { type: 'Link', linkType: 'Entry', id: 'referenced-entry-id' },
+              },
+            },
+          },
+        }
+      );
+      expect(mockCma.entry.create).toHaveBeenNthCalledWith(
+        2,
+        { contentTypeId: 'testContentType' },
+        {
+          fields: {
+            title: { 'en-US': '[CLONE] Referenced Entry Title' },
+          },
+        }
+      );
+
+      expect(mockCma.entry.update).toHaveBeenCalledWith(
+        {
+          entryId: 'cloned-main-entry-id',
+        },
+        expect.objectContaining({
+          fields: {
+            title: { 'en-US': '[CLONE] Main Entry Title' },
+            reference: {
+              'en-US': {
+                sys: { type: 'Link', linkType: 'Entry', id: 'cloned-referenced-entry-id' },
+              },
+            },
+          },
+        })
+      );
+    });
+
+    it('should retry if there is a version mismatch error', async () => {
+      mockCma.contentType.get.mockResolvedValue(contentType);
+      mockCma.entry.get
+        .mockResolvedValueOnce(mainEntry)
+        .mockResolvedValueOnce(referencedEntry)
+        .mockResolvedValueOnce(clonedMainEntry);
+      mockCma.entry.create
+        .mockResolvedValueOnce(clonedMainEntry)
+        .mockResolvedValueOnce(clonedReferencedEntry);
+      mockCma.entry.update
+        .mockRejectedValueOnce({ code: 'VersionMismatch' })
+        .mockResolvedValueOnce(updatedMainEntry);
+      const result = await entryCloner.cloneEntry();
+      expect(result).toEqual(updatedMainEntry);
+      expect(setReferencesCount).toHaveBeenCalledWith(2);
+      expect(setClonesCount).toHaveBeenCalledWith(2);
+      expect(setUpdatesCount).toHaveBeenCalledWith(1);
+
+      expect(mockCma.entry.get).toHaveBeenCalledTimes(3);
+      expect(mockCma.entry.get).toHaveBeenNthCalledWith(1, { entryId: 'main-entry-id' });
+      expect(mockCma.entry.get).toHaveBeenNthCalledWith(2, { entryId: 'referenced-entry-id' });
+      expect(mockCma.entry.get).toHaveBeenNthCalledWith(3, { entryId: 'cloned-main-entry-id' });
+      expect(mockCma.entry.create).toHaveBeenCalledTimes(2);
+      expect(mockCma.entry.update).toHaveBeenCalledTimes(2);
+
+      expect(mockCma.entry.create).toHaveBeenNthCalledWith(
+        1,
+        { contentTypeId: 'testContentType' },
+        {
+          fields: {
+            title: { 'en-US': '[CLONE] Main Entry Title' },
+            reference: {
+              'en-US': {
+                sys: { type: 'Link', linkType: 'Entry', id: 'referenced-entry-id' },
+              },
+            },
+          },
+        }
+      );
+      expect(mockCma.entry.create).toHaveBeenNthCalledWith(
+        2,
+        { contentTypeId: 'testContentType' },
+        {
+          fields: {
+            title: { 'en-US': '[CLONE] Referenced Entry Title' },
+          },
+        }
+      );
+
+      expect(mockCma.entry.update).toHaveBeenCalledWith(
+        {
+          entryId: 'cloned-main-entry-id',
+        },
+        expect.objectContaining({
+          fields: {
+            title: { 'en-US': '[CLONE] Main Entry Title' },
+            reference: {
+              'en-US': {
+                sys: { type: 'Link', linkType: 'Entry', id: 'cloned-referenced-entry-id' },
+              },
+            },
+          },
+        })
+      );
+    });
+
+    it('fails to update the clone if there is an unknown error', async () => {
+      mockCma.contentType.get.mockResolvedValue(contentType);
+      mockCma.entry.get
+        .mockResolvedValueOnce(mainEntry)
+        .mockResolvedValueOnce(referencedEntry)
+        .mockResolvedValueOnce(clonedMainEntry);
+      mockCma.entry.create
+        .mockResolvedValueOnce(clonedMainEntry)
+        .mockResolvedValueOnce(clonedReferencedEntry);
+      mockCma.entry.update.mockRejectedValueOnce({ code: 'UnknownError' });
+      const result = await entryCloner.cloneEntry();
+      expect(result).toEqual(clonedMainEntry);
+      expect(setReferencesCount).toHaveBeenCalledWith(2);
+      expect(setClonesCount).toHaveBeenCalledWith(2);
+      expect(setUpdatesCount).not.toHaveBeenCalled();
+
+      expect(mockCma.entry.get).toHaveBeenCalledTimes(2);
+      expect(mockCma.entry.get).toHaveBeenNthCalledWith(1, { entryId: 'main-entry-id' });
+      expect(mockCma.entry.get).toHaveBeenNthCalledWith(2, { entryId: 'referenced-entry-id' });
+      expect(mockCma.entry.create).toHaveBeenCalledTimes(2);
+      expect(mockCma.entry.update).toHaveBeenCalledTimes(1);
+
+      expect(mockCma.entry.create).toHaveBeenNthCalledWith(
+        1,
+        { contentTypeId: 'testContentType' },
+        {
+          fields: {
+            title: { 'en-US': '[CLONE] Main Entry Title' },
+            reference: {
+              'en-US': {
+                sys: { type: 'Link', linkType: 'Entry', id: 'referenced-entry-id' },
+              },
+            },
+          },
+        }
+      );
+      expect(mockCma.entry.create).toHaveBeenNthCalledWith(
+        2,
+        { contentTypeId: 'testContentType' },
+        {
+          fields: {
+            title: { 'en-US': '[CLONE] Referenced Entry Title' },
+          },
+        }
+      );
+
+      expect(mockCma.entry.update).toHaveBeenCalledWith(
+        {
+          entryId: 'cloned-main-entry-id',
+        },
+        expect.objectContaining({
+          fields: {
+            title: { 'en-US': '[CLONE] Main Entry Title' },
+            reference: {
+              'en-US': {
+                sys: { type: 'Link', linkType: 'Entry', id: 'cloned-referenced-entry-id' },
+              },
+            },
+          },
+        })
+      );
+    });
+  });
+
+  describe('Creation failure handling', () => {
+    beforeEach(() => {
+      contentType = getMockContentType([{ id: 'title', type: 'Text' }]);
+      mainEntry = getMockEntry('main-entry-id', {
+        title: { 'en-US': 'Main Entry Title' },
+      });
+    });
+
+    it('throws when a CMA creation error occurs, aborting before updateReferenceTree', async () => {
+      mockCma.contentType.get.mockResolvedValue(contentType);
+      mockCma.entry.get.mockResolvedValueOnce(mainEntry);
+      mockCma.entry.create.mockRejectedValueOnce(new Error('AccessDenied'));
+
+      await expect(entryCloner.cloneEntry()).rejects.toThrow(
+        'Failed to clone 1 entry. The clone operation was aborted to prevent a partially-cloned structure.'
+      );
+      expect(mockCma.entry.update).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('Clone entry with array of references', () => {
+    beforeEach(() => {
+      contentType = getMockContentType([
+        { id: 'title', type: 'Text' },
+        { id: 'references', type: 'Array', items: { type: 'Link', linkType: 'Entry' } },
+      ]);
+
+      referencedEntry = getMockEntry('referenced-entry-id', {
+        title: { 'en-US': 'Referenced Entry Title' },
+      });
+
+      mainEntry = getMockEntry('main-entry-id', {
+        title: { 'en-US': 'Main Entry Title' },
+        references: {
+          'en-US': [
+            { sys: { type: 'Link', linkType: 'Entry', id: 'referenced-entry-id' } },
+            { sys: { type: 'Link', linkType: 'Entry', id: 'referenced-entry-id' } },
+          ],
+        },
+      });
+
+      clonedReferencedEntry = getMockEntry('cloned-referenced-entry-id', {
+        title: { 'en-US': '[CLONE] Referenced Entry Title' },
+      });
+
+      clonedMainEntry = getMockEntry('cloned-main-entry-id', {
+        title: { 'en-US': '[CLONE] Main Entry Title' },
+        references: {
+          'en-US': [
+            { sys: { type: 'Link', linkType: 'Entry', id: 'referenced-entry-id' } },
+            { sys: { type: 'Link', linkType: 'Entry', id: 'referenced-entry-id' } },
+          ],
+        },
+      });
+      updatedMainEntry = getMockEntry('cloned-main-entry-id', {
+        title: { 'en-US': '[CLONE] Main Entry Title' },
+        references: {
+          'en-US': [
+            { sys: { type: 'Link', linkType: 'Entry', id: 'cloned-referenced-entry-id' } },
+            { sys: { type: 'Link', linkType: 'Entry', id: 'cloned-referenced-entry-id' } },
+          ],
+        },
+      });
+    });
+
+    it('should clone an entry with array of references to the same entry and create only one clone', async () => {
+      mockCma.contentType.get.mockResolvedValue(contentType);
+      mockCma.entry.get.mockResolvedValueOnce(mainEntry).mockResolvedValueOnce(referencedEntry);
+      mockCma.entry.create
+        .mockResolvedValueOnce(clonedMainEntry)
+        .mockResolvedValueOnce(clonedReferencedEntry);
+      mockCma.entry.update.mockResolvedValueOnce(updatedMainEntry);
+
+      const result = await entryCloner.cloneEntry();
+      expect(result).toEqual(updatedMainEntry);
+      expect(setReferencesCount).toHaveBeenCalledWith(2);
+      expect(setClonesCount).toHaveBeenCalledWith(2);
+      expect(setUpdatesCount).toHaveBeenCalledWith(1);
+
+      expect(mockCma.entry.get).toHaveBeenCalledWith({ entryId: 'main-entry-id' });
+      expect(mockCma.entry.get).toHaveBeenCalledWith({ entryId: 'referenced-entry-id' });
+      expect(mockCma.entry.create).toHaveBeenCalledTimes(2);
+      expect(mockCma.entry.update).toHaveBeenCalledTimes(1);
+      expect(mockCma.entry.create).toHaveBeenNthCalledWith(
+        1,
+        { contentTypeId: 'testContentType' },
+        {
+          fields: {
+            title: { 'en-US': '[CLONE] Main Entry Title' },
+            references: {
+              'en-US': [
+                {
+                  sys: { type: 'Link', linkType: 'Entry', id: 'referenced-entry-id' },
+                },
+                {
+                  sys: { type: 'Link', linkType: 'Entry', id: 'referenced-entry-id' },
+                },
+              ],
+            },
+          },
+        }
+      );
+      expect(mockCma.entry.create).toHaveBeenNthCalledWith(
+        2,
+        { contentTypeId: 'testContentType' },
+        {
+          fields: {
+            title: { 'en-US': '[CLONE] Referenced Entry Title' },
+          },
+        }
+      );
+      expect(mockCma.entry.update).toHaveBeenCalledWith(
+        { entryId: 'cloned-main-entry-id' },
+        expect.objectContaining({
+          fields: {
+            title: { 'en-US': '[CLONE] Main Entry Title' },
+            references: {
+              'en-US': [
+                { sys: { type: 'Link', linkType: 'Entry', id: 'cloned-referenced-entry-id' } },
+                { sys: { type: 'Link', linkType: 'Entry', id: 'cloned-referenced-entry-id' } },
+              ],
+            },
+          },
+        })
+      );
+    });
+  });
+
+  describe('Handle deleted entries', () => {
+    beforeEach(() => {
+      contentType = getMockContentType([
+        { id: 'title', type: 'Text' },
+        { id: 'reference', type: 'Link', linkType: 'Entry' },
+      ]);
+
+      mainEntry = getMockEntry('main-entry-id', {
+        title: { 'en-US': 'Main Entry Title' },
+        reference: {
+          'en-US': {
+            sys: { type: 'Link', linkType: 'Entry', id: 'referenced-entry-id' },
+          },
+        },
+      });
+
+      clonedMainEntry = getMockEntry('cloned-main-entry-id', {
+        title: { 'en-US': '[CLONE] Main Entry Title' },
+        reference: {
+          'en-US': {
+            sys: { type: 'Link', linkType: 'Entry', id: 'referenced-entry-id' },
+          },
+        },
+      });
+
+      updatedMainEntry = getMockEntry('cloned-main-entry-id', {
+        title: { 'en-US': '[CLONE] Main Entry Title' },
+        reference: {
+          'en-US': {
+            sys: { type: 'Link', linkType: 'Entry', id: 'referenced-entry-id' },
+          },
+        },
+      });
+    });
+
+    it('should not fail if an entry was deleted', async () => {
+      mockCma.contentType.get.mockResolvedValue(contentType);
+      mockCma.entry.get.mockResolvedValueOnce(mainEntry).mockRejectedValueOnce(new Error('Error'));
+      mockCma.entry.create.mockResolvedValueOnce(clonedMainEntry);
+      const result = await entryCloner.cloneEntry();
+      expect(result).toEqual(updatedMainEntry);
+      expect(setReferencesCount).toHaveBeenCalledWith(1);
+      expect(setClonesCount).toHaveBeenCalledWith(1);
+      expect(setUpdatesCount).not.toHaveBeenCalled();
+
+      expect(mockCma.entry.get).toHaveBeenCalledTimes(2);
+      expect(mockCma.entry.get).toHaveBeenCalledWith({ entryId: 'main-entry-id' });
+      expect(mockCma.entry.get).toHaveBeenCalledWith({ entryId: 'referenced-entry-id' });
+      expect(mockCma.entry.create).toHaveBeenCalledTimes(1);
+      expect(mockCma.entry.update).not.toHaveBeenCalled();
+
+      expect(mockCma.entry.create).toHaveBeenNthCalledWith(
+        1,
+        { contentTypeId: 'testContentType' },
+        {
+          fields: {
+            title: { 'en-US': '[CLONE] Main Entry Title' },
+            reference: {
+              'en-US': {
+                sys: { type: 'Link', linkType: 'Entry', id: 'referenced-entry-id' },
+              },
+            },
+          },
+        }
+      );
+    });
+  });
+
+  describe('Clone only selected references', () => {
+    let anotherReferencedEntry: any;
+    let clonedSelectedReferencedEntry: any;
+
+    beforeEach(() => {
+      contentType = getMockContentType([
+        { id: 'title', type: 'Text' },
+        { id: 'references', type: 'Array', items: { type: 'Link', linkType: 'Entry' } },
+      ]);
+
+      referencedEntry = getMockEntry('referenced-entry-id', {
+        title: { 'en-US': 'Selected Referenced Entry' },
+      });
+
+      anotherReferencedEntry = getMockEntry('another-referenced-entry-id', {
+        title: { 'en-US': 'Unselected Referenced Entry' },
+      });
+
+      mainEntry = getMockEntry('main-entry-id', {
+        title: { 'en-US': 'Main Entry Title' },
+        references: {
+          'en-US': [
+            { sys: { type: 'Link', linkType: 'Entry', id: 'referenced-entry-id' } },
+            { sys: { type: 'Link', linkType: 'Entry', id: 'another-referenced-entry-id' } },
+          ],
+        },
+      });
+
+      clonedSelectedReferencedEntry = getMockEntry('cloned-referenced-entry-id', {
+        title: { 'en-US': '[CLONE] Selected Referenced Entry' },
+      });
+
+      clonedMainEntry = getMockEntry('cloned-main-entry-id', {
+        title: { 'en-US': '[CLONE] Main Entry Title' },
+        references: {
+          'en-US': [
+            { sys: { type: 'Link', linkType: 'Entry', id: 'referenced-entry-id' } },
+            { sys: { type: 'Link', linkType: 'Entry', id: 'another-referenced-entry-id' } },
+          ],
+        },
+      });
+
+      updatedMainEntry = getMockEntry('cloned-main-entry-id', {
+        title: { 'en-US': '[CLONE] Main Entry Title' },
+        references: {
+          'en-US': [
+            { sys: { type: 'Link', linkType: 'Entry', id: 'cloned-referenced-entry-id' } },
+            { sys: { type: 'Link', linkType: 'Entry', id: 'another-referenced-entry-id' } },
+          ],
+        },
+      });
+    });
+
+    it('should clone only the selected referenced entries and keep other links untouched', async () => {
+      mockCma.contentType.get.mockResolvedValue(contentType);
+      mockCma.entry.get
+        .mockResolvedValueOnce(mainEntry)
+        .mockResolvedValueOnce(referencedEntry)
+        .mockResolvedValueOnce(anotherReferencedEntry);
+      mockCma.entry.create
+        .mockResolvedValueOnce(clonedMainEntry)
+        .mockResolvedValueOnce(clonedSelectedReferencedEntry);
+      mockCma.entry.update.mockResolvedValueOnce(updatedMainEntry);
+
+      const result = await entryCloner.cloneEntry(['main-entry-id', 'referenced-entry-id']);
+
+      expect(result).toEqual(updatedMainEntry);
+      expect(setReferencesCount).toHaveBeenLastCalledWith(2);
+      expect(setClonesCount).toHaveBeenCalledWith(2);
+      expect(setUpdatesCount).toHaveBeenCalledWith(1);
+
+      expect(mockCma.entry.create).toHaveBeenCalledTimes(2);
+      expect(mockCma.entry.update).toHaveBeenCalledWith(
+        { entryId: 'cloned-main-entry-id' },
+        expect.objectContaining({
+          fields: {
+            title: { 'en-US': '[CLONE] Main Entry Title' },
+            references: {
+              'en-US': [
+                { sys: { type: 'Link', linkType: 'Entry', id: 'cloned-referenced-entry-id' } },
+                { sys: { type: 'Link', linkType: 'Entry', id: 'another-referenced-entry-id' } },
+              ],
+            },
+          },
+        })
+      );
+    });
+  });
+
+  describe('Clone entry with Rich Text embedded references', () => {
+    beforeEach(() => {
+      contentType = getMockContentType([
+        { id: 'title', type: 'Text' },
+        { id: 'body', type: 'RichText' },
+      ]);
+
+      referencedEntry = getMockEntry('referenced-entry-id', {
+        title: { 'en-US': 'Referenced Entry Title' },
+        body: {
+          'en-US': {
+            nodeType: 'document',
+            data: {},
+            content: [
+              {
+                nodeType: 'paragraph',
+                data: {},
+                content: [
+                  { nodeType: 'text', value: 'Nested reference content', marks: [], data: {} },
+                ],
+              },
+            ],
+          },
+        },
+      });
+
+      mainEntry = getMockEntry('main-entry-id', {
+        title: { 'en-US': 'Main Entry Title' },
+        body: {
+          'en-US': {
+            nodeType: 'document',
+            data: {},
+            content: [
+              {
+                nodeType: 'embedded-entry-block',
+                data: {
+                  target: {
+                    sys: { type: 'Link', linkType: 'Entry', id: 'referenced-entry-id' },
+                  },
+                },
+                content: [],
+              },
+              {
+                nodeType: 'paragraph',
+                data: {},
+                content: [
+                  { nodeType: 'text', value: 'Inline embed ', marks: [], data: {} },
+                  {
+                    nodeType: 'embedded-entry-inline',
+                    data: {
+                      target: {
+                        sys: { type: 'Link', linkType: 'Entry', id: 'referenced-entry-id' },
+                      },
+                    },
+                    content: [],
+                  },
+                ],
+              },
+            ],
+          },
+        },
+      });
+
+      clonedReferencedEntry = getMockEntry('cloned-referenced-entry-id', {
+        title: { 'en-US': '[CLONE] Referenced Entry Title' },
+        body: {
+          'en-US': {
+            nodeType: 'document',
+            data: {},
+            content: [
+              {
+                nodeType: 'paragraph',
+                data: {},
+                content: [
+                  { nodeType: 'text', value: 'Nested reference content', marks: [], data: {} },
+                ],
+              },
+            ],
+          },
+        },
+      });
+
+      clonedMainEntry = getMockEntry('cloned-main-entry-id', {
+        title: { 'en-US': '[CLONE] Main Entry Title' },
+        body: {
+          'en-US': {
+            nodeType: 'document',
+            data: {},
+            content: [
+              {
+                nodeType: 'embedded-entry-block',
+                data: {
+                  target: {
+                    sys: { type: 'Link', linkType: 'Entry', id: 'referenced-entry-id' },
+                  },
+                },
+                content: [],
+              },
+              {
+                nodeType: 'paragraph',
+                data: {},
+                content: [
+                  { nodeType: 'text', value: 'Inline embed ', marks: [], data: {} },
+                  {
+                    nodeType: 'embedded-entry-inline',
+                    data: {
+                      target: {
+                        sys: { type: 'Link', linkType: 'Entry', id: 'referenced-entry-id' },
+                      },
+                    },
+                    content: [],
+                  },
+                ],
+              },
+            ],
+          },
+        },
+      });
+
+      updatedMainEntry = getMockEntry('cloned-main-entry-id', {
+        title: { 'en-US': '[CLONE] Main Entry Title' },
+        body: {
+          'en-US': {
+            nodeType: 'document',
+            data: {},
+            content: [
+              {
+                nodeType: 'embedded-entry-block',
+                data: {
+                  target: {
+                    sys: { type: 'Link', linkType: 'Entry', id: 'cloned-referenced-entry-id' },
+                  },
+                },
+                content: [],
+              },
+              {
+                nodeType: 'paragraph',
+                data: {},
+                content: [
+                  { nodeType: 'text', value: 'Inline embed ', marks: [], data: {} },
+                  {
+                    nodeType: 'embedded-entry-inline',
+                    data: {
+                      target: {
+                        sys: { type: 'Link', linkType: 'Entry', id: 'cloned-referenced-entry-id' },
+                      },
+                    },
+                    content: [],
+                  },
+                ],
+              },
+            ],
+          },
+        },
+      });
+    });
+
+    it('should clone and repoint embedded entry references inside Rich Text fields', async () => {
+      mockCma.contentType.get.mockResolvedValue(contentType);
+      mockCma.entry.get.mockResolvedValueOnce(mainEntry).mockResolvedValueOnce(referencedEntry);
+      mockCma.entry.create
+        .mockResolvedValueOnce(clonedMainEntry)
+        .mockResolvedValueOnce(clonedReferencedEntry);
+      mockCma.entry.update.mockResolvedValueOnce(updatedMainEntry);
+
+      const result = await entryCloner.cloneEntry();
+
+      expect(result).toEqual(updatedMainEntry);
+      expect(setReferencesCount).toHaveBeenCalledWith(2);
+      expect(setClonesCount).toHaveBeenCalledWith(2);
+      expect(setUpdatesCount).toHaveBeenCalledWith(1);
+
+      expect(mockCma.entry.get).toHaveBeenCalledTimes(2);
+      expect(mockCma.entry.get).toHaveBeenCalledWith({ entryId: 'main-entry-id' });
+      expect(mockCma.entry.get).toHaveBeenCalledWith({ entryId: 'referenced-entry-id' });
+      expect(mockCma.entry.create).toHaveBeenCalledTimes(2);
+      expect(mockCma.entry.update).toHaveBeenCalledTimes(1);
+
+      expect(mockCma.entry.update).toHaveBeenCalledWith(
+        { entryId: 'cloned-main-entry-id' },
+        expect.objectContaining({
+          fields: {
+            title: { 'en-US': '[CLONE] Main Entry Title' },
+            body: {
+              'en-US': {
+                nodeType: 'document',
+                data: {},
+                content: [
+                  {
+                    nodeType: 'embedded-entry-block',
+                    data: {
+                      target: {
+                        sys: {
+                          type: 'Link',
+                          linkType: 'Entry',
+                          id: 'cloned-referenced-entry-id',
+                        },
+                      },
+                    },
+                    content: [],
+                  },
+                  {
+                    nodeType: 'paragraph',
+                    data: {},
+                    content: [
+                      { nodeType: 'text', value: 'Inline embed ', marks: [], data: {} },
+                      {
+                        nodeType: 'embedded-entry-inline',
+                        data: {
+                          target: {
+                            sys: {
+                              type: 'Link',
+                              linkType: 'Entry',
+                              id: 'cloned-referenced-entry-id',
+                            },
+                          },
+                        },
+                        content: [],
+                      },
+                    ],
+                  },
+                ],
+              },
+            },
+          },
+        })
+      );
+    });
+  });
+
+  describe('getReferenceEntries', () => {
+    beforeEach(() => {
+      contentType = getMockContentType([{ id: 'title', type: 'Text' }]);
+      referencedEntry = getMockEntry('referenced-entry-id', {
+        title: { 'en-US': 'Referenced Entry Title' },
+      });
+      mainEntry = getMockEntry('main-entry-id', {
+        title: { 'en-US': 'Main Entry Title' },
+        reference: {
+          'en-US': {
+            sys: { type: 'Link', linkType: 'Entry', id: 'referenced-entry-id' },
+          },
+        },
+      });
+    });
+
+    it('returns one row per unique referenced entry with labels', async () => {
+      mockCma.contentType.get.mockResolvedValue(contentType);
+      mockCma.entry.get.mockResolvedValueOnce(mainEntry).mockResolvedValueOnce(referencedEntry);
+
+      const entries = await entryCloner.getReferenceEntries();
+
+      expect(entries).toHaveLength(2);
+      expect(entries[0].entryId).toBe('main-entry-id');
+      expect(entries.map((entry) => entry.entryId).sort()).toEqual([
+        'main-entry-id',
+        'referenced-entry-id',
+      ]);
+    });
+
+    it('returns entries in discovery order with depth and fan-in counts', async () => {
+      const link = (id: string) => ({ sys: { type: 'Link', linkType: 'Entry', id } });
+      const entries: Record<string, ReturnType<typeof getMockEntry>> = {
+        root: getMockEntry('root', {
+          title: { 'en-US': 'Zulu Root' },
+          sections: { 'en-US': [link('section-b'), link('section-a')] },
+        }),
+        'section-b': getMockEntry('section-b', {
+          title: { 'en-US': 'Bravo Section' },
+          footer: { 'en-US': link('footer') },
+        }),
+        'section-a': getMockEntry('section-a', {
+          title: { 'en-US': 'Alpha Section' },
+          footer: { 'en-US': link('footer') },
+        }),
+        footer: getMockEntry('footer', { title: { 'en-US': 'Footer' } }),
+      };
+      entryCloner = new EntryCloner(
+        mockCma as any,
+        mockParameters,
+        'root',
+        setReferencesCount,
+        setClonesCount,
+        setUpdatesCount
+      );
+      mockCma.contentType.get.mockResolvedValue(contentType);
+      mockCma.entry.get.mockImplementation(async ({ entryId }) => entries[entryId]);
+
+      const result = await entryCloner.getReferenceEntries();
+
+      expect(
+        result.map(({ entryId, depth, referencedByCount, parentEntryId, childEntryIds }) => ({
+          entryId,
+          depth,
+          referencedByCount,
+          parentEntryId,
+          childEntryIds,
+        }))
+      ).toEqual([
+        {
+          entryId: 'root',
+          depth: 0,
+          referencedByCount: 0,
+          parentEntryId: null,
+          childEntryIds: ['section-b', 'section-a'],
+        },
+        {
+          entryId: 'section-b',
+          depth: 1,
+          referencedByCount: 1,
+          parentEntryId: 'root',
+          childEntryIds: ['footer'],
+        },
+        {
+          entryId: 'footer',
+          depth: 2,
+          referencedByCount: 2,
+          parentEntryId: 'section-b',
+          childEntryIds: [],
+        },
+        {
+          entryId: 'section-a',
+          depth: 1,
+          referencedByCount: 1,
+          parentEntryId: 'root',
+          childEntryIds: ['footer'],
+        },
+      ]);
+    });
+
+    it('stops discovery when the abort signal is triggered', async () => {
+      const abortController = new AbortController();
+      mockCma.contentType.get.mockResolvedValue(contentType);
+      mockCma.entry.get.mockImplementation(async ({ entryId }) => {
+        if (entryId === 'main-entry-id') {
+          abortController.abort();
+          return mainEntry;
+        }
+        return referencedEntry;
+      });
+
+      await expect(
+        entryCloner.getReferenceEntries({ signal: abortController.signal })
+      ).rejects.toBeInstanceOf(ReferenceDiscoveryAbortedError);
+    });
+  });
+
+  describe('Clone entry with asset links', () => {
+    const assetLink = (id: string) => ({ sys: { type: 'Link', linkType: 'Asset', id } });
+
+    const originalAsset = {
+      sys: { id: 'original-asset-id' },
+      fields: {
+        title: { 'en-US': 'Hero image' },
+        file: {
+          'en-US': {
+            url: '//images.ctfassets.net/space/original-asset-id/hash/hero.jpg',
+            fileName: 'hero.jpg',
+            contentType: 'image/jpeg',
+          },
+        },
+      },
+    };
+
+    let assetEntry: any;
+
+    beforeEach(() => {
+      mockCma.asset.get.mockReset();
+      mockCma.asset.create.mockReset();
+      mockCma.asset.processForAllLocales.mockReset();
+      mockCma.asset.delete.mockReset();
+
+      mockCma.contentType.get.mockResolvedValue(
+        getMockContentType([
+          { id: 'title', type: 'Symbol' },
+          { id: 'image', type: 'Link', linkType: 'Asset' },
+          { id: 'focalPoint', type: 'Object' },
+          { id: 'gallery', type: 'Array', items: { type: 'Link', linkType: 'Asset' } },
+          { id: 'body', type: 'RichText' },
+        ])
+      );
+
+      assetEntry = getMockEntry('main-entry-id', {
+        title: { 'en-US': 'Image With Focal Point' },
+        image: { 'en-US': assetLink('original-asset-id') },
+        focalPoint: { 'en-US': { focalPoint: { x: 100, y: 200 } } },
+        gallery: { 'en-US': [assetLink('original-asset-id')] },
+        body: {
+          'en-US': {
+            nodeType: 'document',
+            data: {},
+            content: [
+              { nodeType: 'paragraph', data: {}, content: [] },
+              {
+                nodeType: 'embedded-asset-block',
+                data: { target: assetLink('original-asset-id') },
+                content: [],
+              },
+            ],
+          },
+        },
+      });
+
+      mockCma.entry.get.mockResolvedValue(assetEntry);
+      mockCma.entry.create.mockImplementation(async (_params, props) =>
+        getMockEntry('cloned-main-entry-id', props.fields)
+      );
+    });
+
+    it('removes asset links and the focal point when the asset cannot be fetched', async () => {
+      mockCma.asset.get.mockRejectedValue(new Error('NotFound'));
+
+      await entryCloner.cloneEntry();
+
+      expect(mockCma.asset.create).not.toHaveBeenCalled();
+      expect(mockCma.entry.create).toHaveBeenCalledWith(
+        { contentTypeId: 'testContentType' },
+        {
+          fields: {
+            title: { 'en-US': '[CLONE] Image With Focal Point' },
+            gallery: { 'en-US': [] },
+            body: {
+              'en-US': {
+                nodeType: 'document',
+                data: {},
+                content: [{ nodeType: 'paragraph', data: {}, content: [] }],
+              },
+            },
+          },
+        }
+      );
+    });
+
+    it('reports how many asset links were removed', async () => {
+      mockCma.asset.get.mockRejectedValue(new Error('NotFound'));
+
+      await entryCloner.cloneEntry();
+
+      expect(entryCloner.getRemovedAssetLinkCount()).toBe(3);
+      expect(await entryCloner.getClonedAssetCount()).toBe(0);
+    });
+
+    it('does not modify the original entry fields', async () => {
+      mockCma.asset.get.mockRejectedValue(new Error('NotFound'));
+
+      await entryCloner.cloneEntry();
+
+      expect(assetEntry.fields.image['en-US']).toEqual(assetLink('original-asset-id'));
+      expect(assetEntry.fields.focalPoint['en-US']).toEqual({ focalPoint: { x: 100, y: 200 } });
+    });
+
+    it('clones the asset once and repoints every link to the copy', async () => {
+      mockCma.asset.get.mockResolvedValue(originalAsset);
+      mockCma.asset.create.mockResolvedValue({ sys: { id: 'cloned-asset-id' } });
+      mockCma.asset.processForAllLocales.mockResolvedValue({ sys: { id: 'cloned-asset-id' } });
+
+      await entryCloner.cloneEntry();
+
+      expect(mockCma.asset.create).toHaveBeenCalledTimes(1);
+      expect(mockCma.asset.create).toHaveBeenCalledWith(
+        {},
+        {
+          fields: {
+            title: { 'en-US': '[CLONE] Hero image' },
+            file: {
+              'en-US': {
+                contentType: 'image/jpeg',
+                fileName: 'hero.jpg',
+                upload: 'https://images.ctfassets.net/space/original-asset-id/hash/hero.jpg',
+              },
+            },
+          },
+        }
+      );
+
+      const createdFields = mockCma.entry.create.mock.calls[0][1].fields;
+      expect(createdFields.image['en-US']).toEqual(assetLink('cloned-asset-id'));
+      expect(createdFields.gallery['en-US']).toEqual([assetLink('cloned-asset-id')]);
+      expect(createdFields.body['en-US'].content[1].data.target).toEqual(
+        assetLink('cloned-asset-id')
+      );
+      expect(createdFields.focalPoint['en-US']).toEqual({ focalPoint: { x: 100, y: 200 } });
+      expect(entryCloner.getRemovedAssetLinkCount()).toBe(0);
+      expect(await entryCloner.getClonedAssetCount()).toBe(1);
+    });
+
+    it('removes asset links and deletes the partial asset when processing fails', async () => {
+      mockCma.asset.get.mockResolvedValue(originalAsset);
+      mockCma.asset.create.mockResolvedValue({ sys: { id: 'cloned-asset-id' } });
+      mockCma.asset.processForAllLocales.mockRejectedValue(new Error('Processing timed out'));
+      mockCma.asset.delete.mockResolvedValue(undefined);
+
+      await entryCloner.cloneEntry();
+
+      expect(mockCma.asset.delete).toHaveBeenCalledWith({ assetId: 'cloned-asset-id' });
+      const createdFields = mockCma.entry.create.mock.calls[0][1].fields;
+      expect(createdFields.image).toBeUndefined();
+      expect(createdFields.focalPoint).toBeUndefined();
+      expect(entryCloner.getRemovedAssetLinkCount()).toBe(3);
+    });
+
+    it('removes asset links when the asset has no file', async () => {
+      mockCma.asset.get.mockResolvedValue({ sys: { id: 'original-asset-id' }, fields: {} });
+
+      await entryCloner.cloneEntry();
+
+      expect(mockCma.asset.create).not.toHaveBeenCalled();
+      expect(mockCma.entry.create.mock.calls[0][1].fields.image).toBeUndefined();
+    });
+  });
+});
