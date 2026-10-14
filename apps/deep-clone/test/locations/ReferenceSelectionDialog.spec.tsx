@@ -21,6 +21,7 @@ vi.mock('@contentful/react-apps-toolkit', () => ({
 }));
 
 // root → branch0 → shared, root → branch1 → shared, branch1 → only1
+// root and branch1 share the hero asset; only1 links two assets of its own
 const referenceEntries: CloneReferenceEntry[] = [
   {
     entryId: 'root',
@@ -30,6 +31,7 @@ const referenceEntries: CloneReferenceEntry[] = [
     referencedByCount: 0,
     parentEntryId: null,
     childEntryIds: ['branch0', 'branch1'],
+    assetIds: ['hero'],
   },
   {
     entryId: 'branch0',
@@ -39,6 +41,7 @@ const referenceEntries: CloneReferenceEntry[] = [
     referencedByCount: 1,
     parentEntryId: 'root',
     childEntryIds: ['shared'],
+    assetIds: [],
   },
   {
     entryId: 'shared',
@@ -48,6 +51,7 @@ const referenceEntries: CloneReferenceEntry[] = [
     referencedByCount: 2,
     parentEntryId: 'branch0',
     childEntryIds: [],
+    assetIds: [],
   },
   {
     entryId: 'branch1',
@@ -57,6 +61,7 @@ const referenceEntries: CloneReferenceEntry[] = [
     referencedByCount: 1,
     parentEntryId: 'root',
     childEntryIds: ['shared', 'only1'],
+    assetIds: ['hero'],
   },
   {
     entryId: 'only1',
@@ -66,6 +71,7 @@ const referenceEntries: CloneReferenceEntry[] = [
     referencedByCount: 1,
     parentEntryId: 'branch1',
     childEntryIds: [],
+    assetIds: ['only1-image', 'only1-file'],
   },
 ];
 
@@ -78,7 +84,7 @@ describe('ReferenceSelectionDialog', () => {
   it('counts each unique referenced entry once', () => {
     render(<ReferenceSelectionDialog />);
 
-    expect(screen.getByText('Selected 4 of 4 referenced entries')).toBeDefined();
+    expect(screen.getByText(/^Selected 4 of 4 referenced entries/)).toBeDefined();
   });
 
   it('deselecting a referenced entry updates the selection count', () => {
@@ -90,7 +96,39 @@ describe('ReferenceSelectionDialog', () => {
       sharedCheckbox!.click();
     });
 
-    expect(screen.getByText('Selected 3 of 4 referenced entries')).toBeDefined();
+    expect(screen.getByText(/^Selected 3 of 4 referenced entries/)).toBeDefined();
+  });
+
+  it('says linked media is copied and counts each unique asset once', () => {
+    render(<ReferenceSelectionDialog />);
+
+    expect(
+      screen.getByText(/Images and files linked from the entries you clone are copied too/)
+    ).toBeDefined();
+    expect(
+      screen.getByText('Selected 4 of 4 referenced entries · 3 media files to copy')
+    ).toBeDefined();
+  });
+
+  it('stops counting the media of entries that will not be cloned', () => {
+    render(<ReferenceSelectionDialog />);
+
+    const branch1Checkbox = screen.getByText('Branch 1').closest('label')?.querySelector('input');
+    act(() => {
+      branch1Checkbox!.click();
+    });
+
+    // only1 is reachable only through branch1, so it is deselected too; root still copies the hero
+    expect(
+      screen.getByText('Selected 2 of 4 referenced entries · 1 media file to copy')
+    ).toBeDefined();
+  });
+
+  it('shows how many media files each entry links to', () => {
+    render(<ReferenceSelectionDialog />);
+
+    expect(screen.getByText('Root entry · 1 media file')).toBeDefined();
+    expect(screen.getByText('block · only1 · 2 media files')).toBeDefined();
   });
 
   it('confirms with the selected entry ids', () => {
@@ -142,7 +180,7 @@ describe('ReferenceSelectionDialog', () => {
 
       expect(checkboxFor('branch1').checked).toBe(false);
       expect(checkboxFor('only1').checked).toBe(false);
-      expect(screen.getByText('Selected 2 of 4 referenced entries')).toBeDefined();
+      expect(screen.getByText(/^Selected 2 of 4 referenced entries/)).toBeDefined();
     });
 
     it('keeps shared entries selected while another selected parent references them', () => {
@@ -161,7 +199,7 @@ describe('ReferenceSelectionDialog', () => {
 
       toggle('branch1');
       expect(checkboxFor('shared').checked).toBe(false);
-      expect(screen.getByText('Selected 0 of 4 referenced entries')).toBeDefined();
+      expect(screen.getByText(/^Selected 0 of 4 referenced entries/)).toBeDefined();
     });
 
     it('reselecting an entry restores the entries nested under it', () => {
@@ -171,7 +209,7 @@ describe('ReferenceSelectionDialog', () => {
       toggle('branch1');
 
       expect(checkboxFor('only1').checked).toBe(true);
-      expect(screen.getByText('Selected 4 of 4 referenced entries')).toBeDefined();
+      expect(screen.getByText(/^Selected 4 of 4 referenced entries/)).toBeDefined();
     });
 
     it('selecting a nested entry reselects its parent chain', () => {
@@ -197,6 +235,7 @@ describe('ReferenceSelectionDialog', () => {
             referencedByCount: 1,
             parentEntryId: 'root',
             childEntryIds: ['root'],
+            assetIds: [],
           },
         ],
       };
@@ -218,6 +257,7 @@ describe('ReferenceSelectionDialog', () => {
       referencedByCount: depth === 0 ? 0 : 1,
       parentEntryId: depth === 0 ? null : `level${depth - 1}`,
       childEntryIds: depth === 10 ? [] : [`level${depth + 1}`],
+      assetIds: [],
     }));
     invocationParameters = { rootEntryId: 'level0', referenceEntries: chain };
     render(<ReferenceSelectionDialog />);

@@ -39,11 +39,10 @@ src/
 - **Circular reference handling**: content models can have circular references (e.g. `Page` references `Section` references `Page`). The traversal must detect and break cycles — this is already implemented; do not remove cycle detection.
 - **Clone order matters**: entries must be created bottom-up (leaf nodes first) so parent entries can link to already-created children. Changing the creation order will cause `422 Unresolvable link` errors.
 - **CMA rate limits**: a deep clone can make dozens of CMA calls. The existing code batches operations — do not replace batching with sequential unconstrained calls.
-- Asset references: assets are linked, not cloned — deep-clone does not duplicate assets, only entries.
+- Asset references (Citizen fork): assets linked from cloned entries are duplicated too — see the last Always/Never rule.
 
 ## Never / Always
 
 - **Never** remove cycle detection from the reference traversal — it will loop infinitely on circular content models.
-- **Never** clone assets — only entries should be cloned; asset links should be preserved by reference.
 - **Always** show progress to the user during long clone operations.
 - **Assets (Citizen fork)**: a clone must never link to the original's assets. `EntryCloner.replaceAssetLinks` repoints links to duplicated assets, removes links to assets that fail to duplicate, and clears `focalPoint` on any entry that lost an asset link. Keep this when merging upstream changes.

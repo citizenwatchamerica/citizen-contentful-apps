@@ -66,6 +66,10 @@ const styles = {
 };
 
 const INDENT_PX = 20;
+
+function formatMediaCount(count: number): string {
+  return `${count} media ${count === 1 ? 'file' : 'files'}`;
+}
 // Keeps very deep graphs readable in the dialog width
 const MAX_INDENT_DEPTH = 8;
 
@@ -74,10 +78,12 @@ function getEntryDescription(
   isRoot: boolean,
   parentLabel: string | undefined
 ): string {
+  const mediaDescription =
+    entry.assetIds.length > 0 ? ` · ${formatMediaCount(entry.assetIds.length)}` : '';
   if (isRoot) {
-    return 'Root entry';
+    return `Root entry${mediaDescription}`;
   }
-  let description = `${entry.contentTypeId} · ${entry.entryId}`;
+  let description = `${entry.contentTypeId} · ${entry.entryId}${mediaDescription}`;
   // Past the indent cap rows stop shifting, so name the parent to keep the structure readable
   if (entry.depth > MAX_INDENT_DEPTH && parentLabel) {
     description = `${description} · under ${parentLabel}`;
@@ -141,6 +147,16 @@ function ReferenceSelectionDialog() {
   const selectedReferenceCount = selectedEntryIds.size - 1;
   const totalReferenceCount = allEntryIds.length - 1;
   const allReferencesSelected = selectedReferenceCount === totalReferenceCount;
+  // Only selected entries are cloned, so only their media is copied; shared assets are copied once
+  const mediaToCopyCount = useMemo(
+    () =>
+      new Set(
+        referenceEntries
+          .filter((entry) => selectedEntryIds.has(entry.entryId))
+          .flatMap((entry) => entry.assetIds)
+      ).size,
+    [referenceEntries, selectedEntryIds]
+  );
 
   const handleToggleEntry = (entryId: string, checked: boolean) => {
     if (entryId === rootEntryId) {
@@ -192,6 +208,10 @@ function ReferenceSelectionDialog() {
           instead of cloning. Deselecting an entry also deselects entries that are only referenced
           through it.
         </Paragraph>
+        <Paragraph marginTop="spacingXs" marginBottom="none">
+          Images and files linked from the entries you clone are copied too, so the clone never
+          shares media with the original.
+        </Paragraph>
       </Box>
 
       <Box className={styles.content}>
@@ -200,6 +220,7 @@ function ReferenceSelectionDialog() {
             {`Selected ${selectedReferenceCount} of ${totalReferenceCount} referenced ${
               totalReferenceCount === 1 ? 'entry' : 'entries'
             }`}
+            {mediaToCopyCount > 0 && ` · ${formatMediaCount(mediaToCopyCount)} to copy`}
           </Text>
           <Button variant="secondary" size="small" onClick={handleToggleAllReferences}>
             {allReferencesSelected ? 'Deselect all references' : 'Select all references'}
