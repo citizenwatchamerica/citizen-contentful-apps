@@ -822,6 +822,27 @@ describe('EntryCloner', () => {
       ]);
     });
 
+    it('lists the assets each entry links to, once each, including rich text embeds', async () => {
+      const assetLink = (id: string) => ({ sys: { type: 'Link', linkType: 'Asset', id } });
+      mainEntry = getMockEntry('main-entry-id', {
+        title: { 'en-US': 'Main Entry Title' },
+        image: { 'en-US': assetLink('hero'), 'fr-CA': assetLink('hero') },
+        gallery: { 'en-US': [assetLink('photo-1'), assetLink('photo-2')] },
+        body: {
+          'en-US': {
+            nodeType: 'document',
+            content: [{ nodeType: 'embedded-asset-block', data: { target: assetLink('inline') } }],
+          },
+        },
+      });
+      mockCma.contentType.get.mockResolvedValue(contentType);
+      mockCma.entry.get.mockResolvedValueOnce(mainEntry);
+
+      const entries = await entryCloner.getReferenceEntries();
+
+      expect(entries[0].assetIds).toEqual(['hero', 'photo-1', 'photo-2', 'inline']);
+    });
+
     it('returns entries in discovery order with depth and fan-in counts', async () => {
       const link = (id: string) => ({ sys: { type: 'Link', linkType: 'Entry', id } });
       const entries: Record<string, ReturnType<typeof getMockEntry>> = {

@@ -24,6 +24,8 @@ export type CloneReferenceEntry = {
   referencedByCount: number;
   parentEntryId: string | null;
   childEntryIds: string[];
+  // Assets this entry links to directly; they are copied when the entry is cloned
+  assetIds: string[];
 };
 
 export class ReferenceDiscoveryAbortedError extends Error {
@@ -140,6 +142,7 @@ class EntryCloner {
         childEntryIds: (this.referenceChildren[entryId] || []).filter(
           (childEntryId) => this.references[childEntryId] !== undefined
         ),
+        assetIds: this.getAssetIds(entry.fields),
       });
     }
 
@@ -354,13 +357,12 @@ class EntryCloner {
 
   // Assets are cloned so edits to a clone's media can't change the original; links to assets that fail to clone are removed
   private async replaceAssetLinks(entryFields: any): Promise<void> {
-    const assetIds = new Set<string>();
-    this.collectAssetIds(entryFields, assetIds);
-    if (assetIds.size === 0) return;
+    const assetIds = this.getAssetIds(entryFields);
+    if (assetIds.length === 0) return;
 
     const clonedAssetIds: ClonedAssetIdMap = {};
     await Promise.all(
-      [...assetIds].map(async (assetId) => {
+      assetIds.map(async (assetId) => {
         clonedAssetIds[assetId] = await this.getAssetClone(assetId);
       })
     );
@@ -391,6 +393,12 @@ class EntryCloner {
       delete entryFields[FOCAL_POINT_FIELD_ID];
       this.removedAssetLinkCount += removedCount;
     }
+  }
+
+  private getAssetIds(entryFields: any): string[] {
+    const assetIds = new Set<string>();
+    this.collectAssetIds(entryFields, assetIds);
+    return [...assetIds];
   }
 
   private collectAssetIds(fieldValue: any, assetIds: Set<string>): void {
