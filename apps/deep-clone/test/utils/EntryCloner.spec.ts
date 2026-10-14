@@ -843,6 +843,68 @@ describe('EntryCloner', () => {
       expect(entries[0].assetIds).toEqual(['hero', 'photo-1', 'photo-2', 'inline']);
     });
 
+    it('looks up linked media, marking missing or unprocessed assets as not copyable', async () => {
+      const assetLink = (id: string) => ({ sys: { type: 'Link', linkType: 'Asset', id } });
+      mainEntry = getMockEntry('main-entry-id', {
+        title: { 'en-US': 'Main Entry Title' },
+        gallery: {
+          'en-US': [assetLink('photo'), assetLink('pdf'), assetLink('draft'), assetLink('gone')],
+        },
+      });
+      mockCma.contentType.get.mockResolvedValue(contentType);
+      mockCma.entry.get.mockResolvedValueOnce(mainEntry);
+      const file = (fileName: string, contentType: string) => ({
+        'en-US': { fileName, contentType, url: `//assets.ctfassets.net/${fileName}` },
+      });
+      mockCma.asset.getMany.mockResolvedValue({
+        items: [
+          {
+            sys: { id: 'photo' },
+            fields: { title: { 'en-US': 'Photo' }, file: file('photo.jpg', 'image/jpeg') },
+          },
+          { sys: { id: 'pdf' }, fields: { title: {}, file: file('guide.pdf', 'application/pdf') } },
+          { sys: { id: 'draft' }, fields: { title: { 'en-US': 'Draft' } } },
+        ],
+      });
+
+      await entryCloner.getReferenceEntries();
+      const assets = await entryCloner.getReferenceAssets();
+
+      expect(mockCma.asset.getMany).toHaveBeenCalledWith({
+        query: { 'sys.id[in]': 'photo,pdf,draft,gone', limit: 100 },
+      });
+      expect(assets).toEqual({
+        photo: {
+          assetId: 'photo',
+          title: 'Photo',
+          fileName: 'photo.jpg',
+          thumbnailUrl: 'https://assets.ctfassets.net/photo.jpg?w=96&h=96&fit=thumb',
+          canCopy: true,
+        },
+        pdf: {
+          assetId: 'pdf',
+          title: 'guide.pdf',
+          fileName: 'guide.pdf',
+          thumbnailUrl: null,
+          canCopy: true,
+        },
+        draft: {
+          assetId: 'draft',
+          title: 'Draft',
+          fileName: null,
+          thumbnailUrl: null,
+          canCopy: false,
+        },
+        gone: {
+          assetId: 'gone',
+          title: 'gone',
+          fileName: null,
+          thumbnailUrl: null,
+          canCopy: false,
+        },
+      });
+    });
+
     it('returns entries in discovery order with depth and fan-in counts', async () => {
       const link = (id: string) => ({ sys: { type: 'Link', linkType: 'Entry', id } });
       const entries: Record<string, ReturnType<typeof getMockEntry>> = {

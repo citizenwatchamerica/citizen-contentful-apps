@@ -9,6 +9,9 @@ type ClonedAssetIdMap = Record<string, string | null>;
 // Image Focal Point coordinates are relative to the linked image, so they are stale once it is removed
 const FOCAL_POINT_FIELD_ID = 'focalPoint';
 const ASSET_PROCESSING_OPTIONS = { processingCheckWait: 2000, processingCheckRetries: 15 };
+// The CMA caps sys.id[in] queries at 100 ids per page
+const ASSET_LOOKUP_BATCH_SIZE = 100;
+const ASSET_THUMBNAIL_QUERY = '?w=96&h=96&fit=thumb';
 
 export type CloneReferenceNode = {
   entryId: string;
@@ -26,6 +29,15 @@ export type CloneReferenceEntry = {
   childEntryIds: string[];
   // Assets this entry links to directly; they are copied when the entry is cloned
   assetIds: string[];
+};
+
+export type CloneReferenceAsset = {
+  assetId: string;
+  title: string;
+  fileName: string | null;
+  thumbnailUrl: string | null;
+  // Deleted assets and assets without a processed file can't be copied, so their links are removed
+  canCopy: boolean;
 };
 
 export class ReferenceDiscoveryAbortedError extends Error {
@@ -147,6 +159,52 @@ class EntryCloner {
     }
 
     return referenceEntries;
+  }
+
+  // Call after getReferenceEntries; looks up every asset the discovered entries link to
+  async getReferenceAssets(): Promise<Record<string, CloneReferenceAsset>> {
+    const assetIds = [
+      ...new Set(Object.values(this.references).flatMap((entry) => this.getAssetIds(entry.fields))),
+    ];
+    const referenceAssets: Record<string, CloneReferenceAsset> = {};
+    for (const assetId of assetIds) {
+      referenceAssets[assetId] = {
+        assetId,
+        title: assetId,
+        fileName: null,
+        thumbnailUrl: null,
+        canCopy: false,
+      };
+    }
+
+    for (let start = 0; start < assetIds.length; start += ASSET_LOOKUP_BATCH_SIZE) {
+      const batch = assetIds.slice(start, start + ASSET_LOOKUP_BATCH_SIZE);
+      const { items } = await this.cma.asset.getMany({
+        query: { 'sys.id[in]': batch.join(','), limit: ASSET_LOOKUP_BATCH_SIZE },
+      });
+      for (const asset of items) {
+        referenceAssets[asset.sys.id] = this.toReferenceAsset(asset);
+      }
+    }
+    return referenceAssets;
+  }
+
+  private toReferenceAsset(asset: AssetProps): CloneReferenceAsset {
+    const title = Object.values(asset.fields.title || {}).find(
+      (value) => typeof value === 'string' && value.trim()
+    );
+    const file = Object.values(asset.fields.file || {}).find((localeFile) => localeFile?.url);
+    const fileUrl = file?.url?.startsWith('//') ? `https:${file.url}` : file?.url;
+    return {
+      assetId: asset.sys.id,
+      title: title || file?.fileName || asset.sys.id,
+      fileName: file?.fileName ?? null,
+      thumbnailUrl:
+        fileUrl && file?.contentType.startsWith('image/')
+          ? `${fileUrl}${ASSET_THUMBNAIL_QUERY}`
+          : null,
+      canCopy: file !== undefined,
+    };
   }
 
   private throwIfDiscoveryAborted(signal?: AbortSignal): void {

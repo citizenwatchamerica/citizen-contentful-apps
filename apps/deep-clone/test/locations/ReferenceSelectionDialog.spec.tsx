@@ -1,10 +1,14 @@
 import React from 'react';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
-import { render, screen, act } from '@testing-library/react';
+import { render, screen, act, within } from '@testing-library/react';
 import ReferenceSelectionDialog from '../../src/locations/ReferenceSelectionDialog';
-import type { CloneReferenceEntry } from '../../src/utils/EntryCloner';
+import type { CloneReferenceAsset, CloneReferenceEntry } from '../../src/utils/EntryCloner';
 
-let invocationParameters: { rootEntryId: string; referenceEntries: CloneReferenceEntry[] };
+let invocationParameters: {
+  rootEntryId: string;
+  referenceEntries: CloneReferenceEntry[];
+  referenceAssets?: Record<string, CloneReferenceAsset>;
+};
 
 const mockSdk = {
   parameters: {
@@ -75,10 +79,34 @@ const referenceEntries: CloneReferenceEntry[] = [
   },
 ];
 
+const referenceAssets: Record<string, CloneReferenceAsset> = {
+  hero: {
+    assetId: 'hero',
+    title: 'Hero Image',
+    fileName: 'hero.jpg',
+    thumbnailUrl: 'https://images.ctfassets.net/hero.jpg?w=96&h=96&fit=thumb',
+    canCopy: true,
+  },
+  'only1-image': {
+    assetId: 'only1-image',
+    title: 'Only1 Image',
+    fileName: 'only1.png',
+    thumbnailUrl: null,
+    canCopy: true,
+  },
+  'only1-file': {
+    assetId: 'only1-file',
+    title: 'only1-file',
+    fileName: null,
+    thumbnailUrl: null,
+    canCopy: false,
+  },
+};
+
 describe('ReferenceSelectionDialog', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    invocationParameters = { rootEntryId: 'root', referenceEntries };
+    invocationParameters = { rootEntryId: 'root', referenceEntries, referenceAssets };
   });
 
   it('counts each unique referenced entry once', () => {
@@ -99,14 +127,14 @@ describe('ReferenceSelectionDialog', () => {
     expect(screen.getByText(/^Selected 3 of 4 referenced entries/)).toBeDefined();
   });
 
-  it('says linked media is copied and counts each unique asset once', () => {
+  it('says linked media is copied and counts each copyable asset once', () => {
     render(<ReferenceSelectionDialog />);
 
     expect(
       screen.getByText(/Images and files linked from the entries you clone are copied too/)
     ).toBeDefined();
     expect(
-      screen.getByText('Selected 4 of 4 referenced entries · 3 media files to copy')
+      screen.getByText('Selected 4 of 4 referenced entries · 2 media files to copy')
     ).toBeDefined();
   });
 
@@ -124,11 +152,49 @@ describe('ReferenceSelectionDialog', () => {
     ).toBeDefined();
   });
 
-  it('shows how many media files each entry links to', () => {
+  it('lists the media linked from each entry under it', () => {
     render(<ReferenceSelectionDialog />);
 
-    expect(screen.getByText('Root entry · 1 media file')).toBeDefined();
-    expect(screen.getByText('block · only1 · 2 media files')).toBeDefined();
+    const rootMedia = screen.getByTestId('media-list-root');
+    expect(within(rootMedia).getByText('Hero Image')).toBeDefined();
+    expect(within(rootMedia).getByText('Copied as a new asset · hero.jpg')).toBeDefined();
+    expect(within(screen.getByTestId('media-list-only1')).getByText('Only1 Image')).toBeDefined();
+    expect(screen.queryByTestId('media-list-branch0')).toBeNull();
+  });
+
+  it('warns about media that cannot be copied', () => {
+    render(<ReferenceSelectionDialog />);
+
+    expect(
+      within(screen.getByTestId('media-list-only1')).getByText(
+        "Can't be copied, so it will be removed from the clone"
+      )
+    ).toBeDefined();
+  });
+
+  it('marks the media of deselected entries as not copied', () => {
+    render(<ReferenceSelectionDialog />);
+
+    const branch1Checkbox = screen.getByText('Branch 1').closest('label')?.querySelector('input');
+    act(() => {
+      branch1Checkbox!.click();
+    });
+
+    expect(
+      within(screen.getByTestId('media-list-branch1')).getByText(
+        'Not copied: this entry stays linked to the original'
+      )
+    ).toBeDefined();
+  });
+
+  it('falls back to asset ids when the media lookup failed', () => {
+    invocationParameters = { rootEntryId: 'root', referenceEntries };
+    render(<ReferenceSelectionDialog />);
+
+    expect(within(screen.getByTestId('media-list-root')).getByText('hero')).toBeDefined();
+    expect(
+      screen.getByText('Selected 4 of 4 referenced entries · 3 media files to copy')
+    ).toBeDefined();
   });
 
   it('confirms with the selected entry ids', () => {
