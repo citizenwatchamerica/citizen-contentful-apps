@@ -63,17 +63,17 @@ function ConfigScreen() {
   return (
     <Flex justifyContent="center" alignItems="center">
       <Box marginBottom="spacing2Xl" marginTop="spacing2Xl" className={styles.body}>
-        <Heading marginBottom="spacingS">Set up Deep Clone</Heading>
+        <Heading marginBottom="spacingS">Set up Full Clone</Heading>
         <Paragraph>
-          Deep Clone enables users to duplicate an entry along with its entire reference tree,
-          automatically copying all linked entries and preserving their structure.
+          Full Clone enables users to duplicate an entry along with its entire reference tree,
+          copying all linked entries and media so the clone never shares anything with the original.
         </Paragraph>
 
         <Subheading marginTop="spacingXl" marginBottom="spacing2Xs">
           Assign content types
         </Subheading>
         <Paragraph marginBottom="spacingM">
-          The Deep Clone app will only be enabled for the content types you assign. The sidebar
+          The Full Clone app will only be enabled for the content types you assign. The sidebar
           widget will be displayed on these entry pages.
         </Paragraph>
         <Paragraph fontWeight="fontWeightDemiBold" marginBottom="spacingXs">
@@ -152,7 +152,7 @@ function ConfigScreen() {
           Getting started
         </Subheading>
         <Paragraph>
-          To use Deep Clone, you must add the app to your entry sidebar. Navigate to the content
+          To use Full Clone, you must add the app to your entry sidebar. Navigate to the content
           model, select a content type and click on Sidebar.
         </Paragraph>
       </Box>

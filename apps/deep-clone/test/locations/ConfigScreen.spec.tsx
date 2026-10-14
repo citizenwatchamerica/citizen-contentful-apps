@@ -28,7 +28,7 @@ describe('Config Screen component', () => {
 
   it('Component text exists', async () => {
     render(<ConfigScreen />);
-    expect(await screen.findByRole('heading', { name: /Set up Deep Clone/i })).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: /Set up Full Clone/i })).toBeTruthy();
     expect(await screen.findByText(/Assign content types/i)).toBeTruthy();
     expect(await screen.findByText(/Naming/i)).toBeTruthy();
     expect(await screen.findByText(/Getting started/i)).toBeTruthy();

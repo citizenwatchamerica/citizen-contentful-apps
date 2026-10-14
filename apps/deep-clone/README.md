@@ -1,3 +1,7 @@
+# Full Clone
+
+Our in-house replacement for the Marketplace Deep Clone app. It lives in `apps/deep-clone` to keep it easy to compare against and pull fixes from upstream.
+
 ## Citizen fork
 
 Forked from Contentful's [Deep Clone](https://github.com/contentful/apps/tree/master/apps/deep-clone) app (v1.2.1), which does not clone assets: cloned entries kept linking to the original media, so editing that media on a clone also changed the original. This fork never leaves a clone sharing media with the original:
