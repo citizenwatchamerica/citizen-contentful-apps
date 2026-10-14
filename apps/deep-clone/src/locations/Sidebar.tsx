@@ -161,7 +161,7 @@ function Sidebar() {
   return (
     <Stack spacing="spacingM" flexDirection="column" alignItems="start">
       <Text fontColor="gray500" fontWeight="fontWeightMedium">
-        Clone this entry and all referenced entries
+        Clone this entry and all referenced entries, including media
       </Text>
       <Button
         variant="secondary"
