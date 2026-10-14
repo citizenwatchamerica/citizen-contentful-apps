@@ -2,7 +2,10 @@ import { useEffect, useRef, useState } from 'react';
 import { Text, Button, Stack, Note } from '@contentful/f36-components';
 import { useAutoResizer, useSDK } from '@contentful/react-apps-toolkit';
 import { SidebarAppSDK } from '@contentful/app-sdk';
-import EntryCloner, { ReferenceDiscoveryAbortedError } from '../utils/EntryCloner';
+import EntryCloner, {
+  CloneReferenceAsset,
+  ReferenceDiscoveryAbortedError,
+} from '../utils/EntryCloner';
 import { useInstallationParameters } from '../utils/useInstallationParameters';
 import { AppParameters } from '@/vite-env';
 
@@ -97,6 +100,14 @@ function Sidebar() {
       return;
     }
 
+    let referenceAssets: Record<string, CloneReferenceAsset> = {};
+    try {
+      referenceAssets = await cloner.getReferenceAssets();
+    } catch (error) {
+      // The dialog falls back to asset ids, so a failed lookup shouldn't block cloning
+      console.warn('Could not look up linked media for the clone dialog', error);
+    }
+
     setIsDiscovering(false);
     setIsConfirming(true);
 
@@ -108,6 +119,7 @@ function Sidebar() {
       parameters: {
         rootEntryId: sdk.ids.entry,
         referenceEntries,
+        referenceAssets,
       },
     });
 
@@ -194,8 +206,8 @@ function Sidebar() {
             {isDiscovering && referencesCount === 0
               ? 'Discovering references…'
               : isDiscovering
-              ? `Discovering references… (${referencesCount} found so far)`
-              : `Found ${referencesCount} ${referencesCount === 1 ? 'reference' : 'references'}.`}
+                ? `Discovering references… (${referencesCount} found so far)`
+                : `Found ${referencesCount} ${referencesCount === 1 ? 'reference' : 'references'}.`}
           </Text>
         )}
         {(isCloning || isRedirecting || isFinished) && (

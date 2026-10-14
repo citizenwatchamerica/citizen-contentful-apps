@@ -12,6 +12,7 @@ const mockCma = {
   },
   asset: {
     get: vi.fn(),
+    getMany: vi.fn(),
     create: vi.fn(),
     processForAllLocales: vi.fn(),
     delete: vi.fn(),

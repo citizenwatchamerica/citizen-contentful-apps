@@ -5,6 +5,7 @@ import {
   Box,
   Button,
   Checkbox,
+  EntityList,
   Flex,
   Heading,
   Paragraph,
@@ -12,11 +13,12 @@ import {
   Text,
 } from '@contentful/f36-components';
 import { css } from '@emotion/css';
-import { CloneReferenceEntry } from '../utils/EntryCloner';
+import { CloneReferenceAsset, CloneReferenceEntry } from '../utils/EntryCloner';
 
 type DialogInvocationParameters = {
   rootEntryId: string;
   referenceEntries: CloneReferenceEntry[];
+  referenceAssets?: Record<string, CloneReferenceAsset>;
 };
 
 const styles = {
@@ -59,6 +61,11 @@ const styles = {
     flex: '1 1 auto',
     minWidth: 0,
   }),
+  // Lines the media up under the entry name rather than the checkbox
+  mediaList: css({
+    marginTop: '8px',
+    marginLeft: '28px',
+  }),
   nestedEntryRow: css({
     paddingLeft: '12px',
     borderLeft: '1px solid #d3dce6',
@@ -78,12 +85,10 @@ function getEntryDescription(
   isRoot: boolean,
   parentLabel: string | undefined
 ): string {
-  const mediaDescription =
-    entry.assetIds.length > 0 ? ` · ${formatMediaCount(entry.assetIds.length)}` : '';
   if (isRoot) {
-    return `Root entry${mediaDescription}`;
+    return 'Root entry';
   }
-  let description = `${entry.contentTypeId} · ${entry.entryId}${mediaDescription}`;
+  let description = `${entry.contentTypeId} · ${entry.entryId}`;
   // Past the indent cap rows stop shifting, so name the parent to keep the structure readable
   if (entry.depth > MAX_INDENT_DEPTH && parentLabel) {
     description = `${description} · under ${parentLabel}`;
@@ -95,6 +100,16 @@ function getEntryDescription(
     }`;
   }
   return description;
+}
+
+function getMediaDescription(asset: CloneReferenceAsset, isEntrySelected: boolean): string {
+  if (!isEntrySelected) {
+    return 'Not copied: this entry stays linked to the original';
+  }
+  if (!asset.canCopy) {
+    return "Can't be copied, so it will be removed from the clone";
+  }
+  return asset.fileName ? `Copied as a new asset · ${asset.fileName}` : 'Copied as a new asset';
 }
 
 // An unselected entry stays linked to its original, so anything reachable only through it would be an orphan clone
@@ -119,7 +134,7 @@ function pruneUnreachable(
 function ReferenceSelectionDialog() {
   const sdk = useSDK<DialogAppSDK>();
   const invocationParameters = sdk.parameters.invocation as DialogInvocationParameters;
-  const { rootEntryId, referenceEntries } = invocationParameters;
+  const { rootEntryId, referenceEntries, referenceAssets = {} } = invocationParameters;
   useAutoResizer();
 
   const allEntryIds = useMemo(
@@ -154,8 +169,9 @@ function ReferenceSelectionDialog() {
         referenceEntries
           .filter((entry) => selectedEntryIds.has(entry.entryId))
           .flatMap((entry) => entry.assetIds)
+          .filter((assetId) => referenceAssets[assetId]?.canCopy !== false)
       ).size,
-    [referenceEntries, selectedEntryIds]
+    [referenceEntries, referenceAssets, selectedEntryIds]
   );
 
   const handleToggleEntry = (entryId: string, checked: boolean) => {
@@ -260,6 +276,29 @@ function ReferenceSelectionDialog() {
                     </Text>
                   </span>
                 </Checkbox>
+                {entry.assetIds.length > 0 && (
+                  <EntityList className={styles.mediaList} testId={`media-list-${entry.entryId}`}>
+                    {entry.assetIds.map((assetId) => {
+                      const asset = referenceAssets[assetId] ?? {
+                        assetId,
+                        title: assetId,
+                        fileName: null,
+                        thumbnailUrl: null,
+                        canCopy: true,
+                      };
+                      return (
+                        <EntityList.Item
+                          key={assetId}
+                          entityType="asset"
+                          title={asset.title}
+                          description={getMediaDescription(asset, isChecked)}
+                          withThumbnail
+                          {...(asset.thumbnailUrl ? { thumbnailUrl: asset.thumbnailUrl } : {})}
+                        />
+                      );
+                    })}
+                  </EntityList>
+                )}
               </Box>
             );
           })}

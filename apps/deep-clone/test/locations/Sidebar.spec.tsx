@@ -56,6 +56,15 @@ vi.mock('../../src/utils/EntryCloner', () => {
               },
             ];
           }),
+          getReferenceAssets: vi.fn().mockResolvedValue({
+            hero: {
+              assetId: 'hero',
+              title: 'Hero Image',
+              fileName: 'hero.jpg',
+              thumbnailUrl: null,
+              canCopy: true,
+            },
+          }),
           cloneEntry: mockCloneEntry.mockImplementation(async () => {
             setReferencesCount(2);
             setClonesCount(2);
@@ -220,6 +229,15 @@ describe('Sidebar component', () => {
             childEntryIds: [],
           },
         ],
+        referenceAssets: {
+          hero: {
+            assetId: 'hero',
+            title: 'Hero Image',
+            fileName: 'hero.jpg',
+            thumbnailUrl: null,
+            canCopy: true,
+          },
+        },
       },
     });
 
