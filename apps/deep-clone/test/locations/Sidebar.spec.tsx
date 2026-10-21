@@ -7,7 +7,6 @@ import { mockSdk } from '../mocks';
 beforeEach(() => {
   vi.useFakeTimers();
   vi.resetModules();
-  mockGetFailedUpdateIds.mockReturnValue([]);
   mockGetClonedAssetCount.mockResolvedValue(0);
   mockGetRemovedAssetLinkCount.mockReturnValue(0);
 });
@@ -23,7 +22,6 @@ vi.mock('@contentful/react-apps-toolkit', () => ({
 }));
 
 const mockCloneEntry = vi.fn();
-const mockGetFailedUpdateIds = vi.fn().mockReturnValue([]);
 const mockGetClonedAssetCount = vi.fn().mockResolvedValue(0);
 const mockGetRemovedAssetLinkCount = vi.fn().mockReturnValue(0);
 
@@ -31,51 +29,47 @@ vi.mock('../../src/utils/EntryCloner', () => {
   return {
     default: vi
       .fn()
-      .mockImplementation(
-        (cma, parameters, entryId, setReferencesCount, setClonesCount, setUpdatesCount) => ({
-          getReferenceEntries: vi.fn().mockImplementation(async () => {
-            setReferencesCount(2);
-            return [
-              {
-                entryId: 'test-entry',
-                label: 'Main Entry',
-                contentTypeId: 'page',
-                depth: 0,
-                referencedByCount: 0,
-                parentEntryId: null,
-                childEntryIds: ['referenced-entry-id'],
-              },
-              {
-                entryId: 'referenced-entry-id',
-                label: 'Referenced Entry',
-                contentTypeId: 'section',
-                depth: 1,
-                referencedByCount: 1,
-                parentEntryId: 'test-entry',
-                childEntryIds: [],
-              },
-            ];
-          }),
-          getReferenceAssets: vi.fn().mockResolvedValue({
-            hero: {
-              assetId: 'hero',
-              title: 'Hero Image',
-              fileName: 'hero.jpg',
-              thumbnailUrl: null,
-              canCopy: true,
+      .mockImplementation((cma, parameters, entryId, setReferencesCount, setClonesCount) => ({
+        getReferenceEntries: vi.fn().mockImplementation(async () => {
+          setReferencesCount(2);
+          return [
+            {
+              entryId: 'test-entry',
+              label: 'Main Entry',
+              contentTypeId: 'page',
+              depth: 0,
+              referencedByCount: 0,
+              parentEntryId: null,
+              childEntryIds: ['referenced-entry-id'],
             },
-          }),
-          cloneEntry: mockCloneEntry.mockImplementation(async () => {
-            setReferencesCount(2);
-            setClonesCount(2);
-            setUpdatesCount(1);
-            return { sys: { id: 'cloned-id' } };
-          }),
-          getFailedUpdateIds: mockGetFailedUpdateIds,
-          getClonedAssetCount: mockGetClonedAssetCount,
-          getRemovedAssetLinkCount: mockGetRemovedAssetLinkCount,
-        })
-      ),
+            {
+              entryId: 'referenced-entry-id',
+              label: 'Referenced Entry',
+              contentTypeId: 'section',
+              depth: 1,
+              referencedByCount: 1,
+              parentEntryId: 'test-entry',
+              childEntryIds: [],
+            },
+          ];
+        }),
+        getReferenceAssets: vi.fn().mockResolvedValue({
+          hero: {
+            assetId: 'hero',
+            title: 'Hero Image',
+            fileName: 'hero.jpg',
+            thumbnailUrl: null,
+            canCopy: true,
+          },
+        }),
+        cloneEntry: mockCloneEntry.mockImplementation(async () => {
+          setReferencesCount(2);
+          setClonesCount(2);
+          return { sys: { id: 'cloned-id' } };
+        }),
+        getClonedAssetCount: mockGetClonedAssetCount,
+        getRemovedAssetLinkCount: mockGetRemovedAssetLinkCount,
+      })),
   };
 });
 
@@ -101,7 +95,6 @@ describe('Sidebar component', () => {
     });
     expect(getByText('Found 2 references.')).toBeDefined();
     expect(getByText('Created 2 new entries out of 2.')).toBeDefined();
-    expect(getByText('Updated 1 reference.')).toBeDefined();
   });
 
   it('calls redirect and shows redirect message', async () => {
@@ -141,7 +134,6 @@ describe('Sidebar component', () => {
       },
       'test-entry',
       expect.anything(),
-      expect.anything(),
       expect.anything()
     );
   });
@@ -159,23 +151,6 @@ describe('Sidebar component', () => {
       'Clone failed. Some entries could not be created.'
     );
     expect(mockSdk.notifier.success).not.toHaveBeenCalled();
-  });
-
-  it('shows warning Note when some reference updates fail after a successful clone', async () => {
-    mockGetFailedUpdateIds.mockReturnValue(['entry-1', 'entry-2']);
-
-    const { getByText } = render(<Sidebar />);
-    await act(async () => {
-      fireEvent.click(getByText('Clone entry'));
-    });
-
-    expect(
-      getByText(
-        'Clone created, but 2 internal links could not be repointed. Some references may still point to the original entries.'
-      )
-    ).toBeDefined();
-    expect(mockSdk.notifier.success).toHaveBeenCalledWith('Clone successful');
-    expect(mockSdk.notifier.error).not.toHaveBeenCalled();
   });
 
   it('shows media warning Note and cloned asset count after cloning', async () => {

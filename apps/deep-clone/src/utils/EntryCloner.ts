@@ -12,6 +12,8 @@ const ASSET_PROCESSING_OPTIONS = { processingCheckWait: 2000, processingCheckRet
 // The CMA caps sys.id[in] queries at 100 ids per page
 const ASSET_LOOKUP_BATCH_SIZE = 100;
 const ASSET_THUMBNAIL_QUERY = '?w=96&h=96&fit=thumb';
+const ENTRY_ID_CHARACTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+const ENTRY_ID_LENGTH = 22;
 
 export type CloneReferenceNode = {
   entryId: string;
@@ -50,8 +52,9 @@ export class ReferenceDiscoveryAbortedError extends Error {
 class EntryCloner {
   private references: ReferenceMap = {};
   private clones: ReferenceMap = {};
+  private cloneIds: Record<string, string> = {};
   private failedCloneIds: string[] = [];
-  private failedUpdateIds: string[] = [];
+  private cloneErrorReasons: Set<string> = new Set();
   private assetClones: Record<string, Promise<string | null>> = {};
   private removedAssetLinkCount: number = 0;
   private referenceChildren: ReferenceChildrenMap = {};
@@ -59,28 +62,24 @@ class EntryCloner {
   private discoveryDepths: Record<string, number> = {};
   private discoveryParents: Record<string, string | null> = {};
   private contentTypes: { [id: string]: ContentTypeProps } = {};
-  private updates: number = 0;
   private parameters: AppParameters;
   private cma: CMAClient;
   private entryId: string;
   private setReferencesCount: (count: number) => void;
   private setClonesCount: (count: number) => void;
-  private setUpdatesCount: (count: number) => void;
 
   constructor(
     cma: CMAClient,
     parameters: AppParameters,
     entryId: string,
     setReferencesCount: (count: number) => void,
-    setClonesCount: (count: number) => void,
-    setUpdatesCount: (count: number) => void
+    setClonesCount: (count: number) => void
   ) {
     this.cma = cma;
     this.parameters = parameters;
     this.entryId = entryId;
     this.setReferencesCount = setReferencesCount;
     this.setClonesCount = setClonesCount;
-    this.setUpdatesCount = setUpdatesCount;
   }
 
   async cloneEntry(selectedEntryIds?: string[]): Promise<EntryProps> {
@@ -96,15 +95,12 @@ class EntryCloner {
       throw new Error(
         `Failed to clone ${this.failedCloneIds.length} ${
           this.failedCloneIds.length === 1 ? 'entry' : 'entries'
-        }. The clone operation was aborted to prevent a partially-cloned structure.`
+        }: ${[...this.cloneErrorReasons].join(
+          '; '
+        )}. The clone operation was aborted to prevent a partially-cloned structure.`
       );
     }
-    await this.updateReferenceTree();
     return this.clones[this.entryId] as EntryProps;
-  }
-
-  getFailedUpdateIds(): string[] {
-    return this.failedUpdateIds;
   }
 
   async getClonedAssetCount(): Promise<number> {
@@ -253,16 +249,24 @@ class EntryCloner {
     }
   }
 
+  // Clone ids are chosen up front so every clone is created already linking to the other clones.
+  // A follow-up update to repoint links would be rejected for roles that can't edit the default locale.
   private async createClones(): Promise<void> {
-    const clonePromises = Object.entries(this.references).map(async ([entryId, entry]) => {
+    const plannedClones = Object.entries(this.references).map(([entryId, entry]) => {
+      const cloneId = this.generateEntryId();
+      this.cloneIds[entryId] = cloneId;
+      return { entryId, entry, cloneId };
+    });
+
+    const clonePromises = plannedClones.map(async ({ entryId, entry, cloneId }) => {
       try {
         const entryFields = await this.getFieldsForClone(entry);
         const createProps: CreateEntryProps = {
           fields: entryFields,
           ...(entry.metadata ? { metadata: entry.metadata } : {}),
         };
-        const clone = await this.cma.entry.create(
-          { contentTypeId: entry.sys.contentType.sys.id },
+        const clone = await this.cma.entry.createWithId(
+          { contentTypeId: entry.sys.contentType.sys.id, entryId: cloneId },
           createProps
         );
         this.clones[entryId] = clone;
@@ -270,54 +274,29 @@ class EntryCloner {
       } catch (error) {
         console.warn('Error creating clone', error);
         this.failedCloneIds.push(entryId);
+        this.cloneErrorReasons.add(this.getErrorReason(error));
       }
     });
 
     await Promise.all(clonePromises);
   }
 
-  private async updateReferenceTree(): Promise<void> {
-    const updatePromises = Object.values(this.clones).map(async (clone) => {
-      let cloneWasUpdated = false;
-      for (const fieldId in clone.fields) {
-        const field = clone.fields[fieldId];
+  // CMA errors carry their code (e.g. AccessDenied) in name and a JSON payload in message
+  private getErrorReason(error: unknown): string {
+    if (!(error instanceof Error)) return 'Unknown error';
+    try {
+      const payload = JSON.parse(error.message);
+      return [error.name, payload.message].filter(Boolean).join(': ');
+    } catch {
+      return error.message || error.name;
+    }
+  }
 
-        for (const locale in field) {
-          const fieldValue = field[locale];
-          const fieldWasUpdated = await this.updateReferencesOnField(fieldValue);
-          cloneWasUpdated ||= fieldWasUpdated;
-        }
-      }
-
-      if (cloneWasUpdated) {
-        let latestClone = clone;
-        for (let retryCount = 0; retryCount < 3; retryCount++) {
-          try {
-            await this.cma.entry.update(
-              { entryId: latestClone.sys.id },
-              {
-                sys: { ...latestClone.sys, version: latestClone.sys.version },
-                fields: clone.fields,
-              }
-            );
-            this.updates++;
-            this.setUpdatesCount(this.updates);
-            break;
-          } catch (error: any) {
-            if (error.code === 'VersionMismatch') {
-              console.warn('Error updating clone, retrying...', error);
-              latestClone = await this.cma.entry.get({ entryId: clone.sys.id });
-            } else {
-              console.warn('Error updating clone.', error);
-              this.failedUpdateIds.push(clone.sys.id);
-              break;
-            }
-          }
-        }
-      }
-    });
-
-    await Promise.all(updatePromises);
+  private generateEntryId(): string {
+    const randomValues = window.crypto.getRandomValues(new Uint8Array(ENTRY_ID_LENGTH));
+    return Array.from(randomValues, (randomValue) =>
+      ENTRY_ID_CHARACTERS.charAt(randomValue % ENTRY_ID_CHARACTERS.length)
+    ).join('');
   }
 
   private async inspectField(
@@ -346,39 +325,20 @@ class EntryCloner {
     }
   }
 
-  private async updateReferencesOnField(fieldValue: any): Promise<boolean> {
-    if (!fieldValue) return false;
+  private replaceEntryLinks(fieldValue: any): void {
+    if (!this.isObject(fieldValue)) return;
 
     if (this.isReference(fieldValue)) {
-      const clone = this.clones[fieldValue.sys.id];
-      if (clone !== undefined) {
-        fieldValue.sys.id = clone.sys.id;
-        return true;
+      const cloneId = this.cloneIds[fieldValue.sys.id];
+      if (cloneId !== undefined) {
+        fieldValue.sys.id = cloneId;
       }
-      return false;
+      return;
     }
 
-    if (Array.isArray(fieldValue)) {
-      let didUpdateArray = false;
-      for (const value of fieldValue) {
-        if (await this.updateReferencesOnField(value)) {
-          didUpdateArray = true;
-        }
-      }
-      return didUpdateArray;
+    for (const value of Object.values(fieldValue)) {
+      this.replaceEntryLinks(value);
     }
-
-    if (this.isObject(fieldValue)) {
-      let didUpdateObject = false;
-      for (const value of Object.values(fieldValue)) {
-        if (await this.updateReferencesOnField(value)) {
-          didUpdateObject = true;
-        }
-      }
-      return didUpdateObject;
-    }
-
-    return false;
   }
 
   private async getFieldsForClone(entry: EntryProps): Promise<any> {
@@ -403,6 +363,7 @@ class EntryCloner {
     }
 
     await this.replaceAssetLinks(entryFields);
+    this.replaceEntryLinks(entryFields);
 
     return entryFields;
   }

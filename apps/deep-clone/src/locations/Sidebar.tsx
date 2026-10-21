@@ -16,7 +16,6 @@ function Sidebar() {
 
   const [referencesCount, setReferencesCount] = useState<number>(0);
   const [clonesCount, setClonesCount] = useState<number>(0);
-  const [updatesCount, setUpdatesCount] = useState<number>(0);
   const [clonedAssetCount, setClonedAssetCount] = useState<number>(0);
   const [removedAssetLinkCount, setRemovedAssetLinkCount] = useState<number>(0);
   const [countdown, setCountdown] = useState<number>(0);
@@ -28,7 +27,6 @@ function Sidebar() {
   const [isFinished, setIsFinished] = useState<boolean>(false);
   const [isRedirecting, setIsRedirecting] = useState<boolean>(false);
   const [cloneError, setCloneError] = useState<string | null>(null);
-  const [cloneWarning, setCloneWarning] = useState<string | null>(null);
   const discoveryAbortControllerRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
@@ -54,11 +52,9 @@ function Sidebar() {
     setIsRedirecting(false);
     setReferencesCount(0);
     setClonesCount(0);
-    setUpdatesCount(0);
     setClonedAssetCount(0);
     setRemovedAssetLinkCount(0);
     setCloneError(null);
-    setCloneWarning(null);
     discoveryAbortControllerRef.current = null;
   };
 
@@ -75,8 +71,7 @@ function Sidebar() {
       parameters,
       sdk.ids.entry,
       setReferencesCount,
-      setClonesCount,
-      setUpdatesCount
+      setClonesCount
     );
 
     const discoveryAbortController = new AbortController();
@@ -143,15 +138,6 @@ function Sidebar() {
       return;
     }
 
-    const failedUpdateIds = cloner.getFailedUpdateIds();
-    if (failedUpdateIds.length > 0) {
-      setCloneWarning(
-        `Clone created, but ${failedUpdateIds.length} internal ${
-          failedUpdateIds.length === 1 ? 'link' : 'links'
-        } could not be repointed. Some references may still point to the original entries.`
-      );
-    }
-
     setClonedAssetCount(await cloner.getClonedAssetCount());
     setRemovedAssetLinkCount(cloner.getRemovedAssetLinkCount());
 
@@ -195,11 +181,6 @@ function Sidebar() {
           {cloneError}
         </Note>
       )}
-      {cloneWarning && (
-        <Note variant="warning" style={{ width: '100%' }}>
-          {cloneWarning}
-        </Note>
-      )}
       <Stack spacing="spacing2Xs" flexDirection="column" alignItems="start">
         {showProgress && (
           <Text fontColor="gray500" fontWeight="fontWeightMedium">
@@ -216,9 +197,6 @@ function Sidebar() {
               {`Created ${clonesCount} new ${
                 clonesCount === 1 ? 'entry' : 'entries'
               } out of ${referencesCount}.`}
-            </Text>
-            <Text fontColor="gray500" fontWeight="fontWeightMedium">
-              {`Updated ${updatesCount} ${updatesCount === 1 ? 'reference' : 'references'}.`}
             </Text>
             {clonedAssetCount > 0 && (
               <Text fontColor="gray500" fontWeight="fontWeightMedium">
