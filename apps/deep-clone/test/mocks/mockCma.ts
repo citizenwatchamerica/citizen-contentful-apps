@@ -7,7 +7,7 @@ const mockCma = {
   },
   entry: {
     get: vi.fn(),
-    create: vi.fn(),
+    createWithId: vi.fn(),
     update: vi.fn(),
   },
   asset: {

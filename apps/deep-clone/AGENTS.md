@@ -40,9 +40,11 @@ src/
 - **Clone order matters**: entries must be created bottom-up (leaf nodes first) so parent entries can link to already-created children. Changing the creation order will cause `422 Unresolvable link` errors.
 - **CMA rate limits**: a deep clone can make dozens of CMA calls. The existing code batches operations — do not replace batching with sequential unconstrained calls.
 - Asset references (Citizen fork): assets linked from cloned entries are duplicated too — see the last Always/Never rule.
+- Entry links (Citizen fork): clone ids are generated before anything is created and each clone is created with `createWithId` already linking to the other clones, so there is no follow-up update pass.
 
 ## Never / Always
 
 - **Never** remove cycle detection from the reference traversal — it will loop infinitely on circular content models.
 - **Always** show progress to the user during long clone operations.
 - **Assets (Citizen fork)**: a clone must never link to the original's assets. `EntryCloner.replaceAssetLinks` repoints links to duplicated assets, removes links to assets that fail to duplicate, and clears `focalPoint` on any entry that lost an asset link. Keep this when merging upstream changes.
+- **Never** reintroduce a second pass that updates clones to repoint links (Citizen fork). Regional Merchants roles can create entries but can't edit the default locale, which is where non-localized reference fields live, so that update fails and leaves the clone linked to the original entries.
