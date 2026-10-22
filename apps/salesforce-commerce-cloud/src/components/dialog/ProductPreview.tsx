@@ -2,9 +2,11 @@ import React from 'react';
 
 import { Flex, Text } from '@contentful/f36-components';
 
-const ProductPreview = (props: { product: any }) => {
+import { getLocalizedValue } from '../../utils/localized';
+
+const ProductPreview = (props: { product: any; locale?: string }) => {
   const descriptionLength = 178;
-  const { product } = props;
+  const { product, locale } = props;
 
   let description = 'Description';
   if (product.shortDescription?.default) {
@@ -28,7 +30,7 @@ const ProductPreview = (props: { product: any }) => {
       )}
       <Flex flexDirection="column" marginLeft="spacingS">
         <Text as="div" fontWeight="fontWeightDemiBold">
-          {product.name?.default || 'Untitled Product'} (ID: {product.id})
+          {getLocalizedValue(product.name, locale) || 'Untitled Product'} (ID: {product.id})
         </Text>
         <Text as="div">{description}</Text>
       </Flex>
