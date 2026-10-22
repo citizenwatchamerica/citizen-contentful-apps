@@ -59,6 +59,23 @@ describe('Dialog component', () => {
     expect(getByText(/has to be\s+included, either because this entry has never been published/)).toBeTruthy();
   });
 
+  it('offers optional locales unticked and lets the user add them', () => {
+    mockSdk.parameters.invocation = { ...mockSdk.parameters.invocation, optionalLocales: ['en-US'] };
+    const { getByText, container } = render(<Dialog />);
+
+    expect(container.querySelector('#dialog-publish-en-US')).toHaveProperty('checked', false);
+    expect(container.querySelector('#dialog-publish-en-US')).toHaveProperty('disabled', false);
+    expect(container.querySelector('#dialog-publish-en-GB')).toHaveProperty('checked', true);
+    expect(getByText(/Your team owns this entry, so you can also publish/)).toBeTruthy();
+
+    fireEvent.click(getByText('Publish selected regions (1)'));
+    expect(mockSdk.close).toHaveBeenLastCalledWith(['en-GB']);
+
+    fireEvent.click(container.querySelector('#dialog-publish-en-US')!);
+    fireEvent.click(getByText('Publish all my regions (2)'));
+    expect(mockSdk.close).toHaveBeenLastCalledWith(['en-GB', 'en-US']);
+  });
+
   it('in unpublish mode, starts with nothing checked and uses unpublish wording', () => {
     mockSdk.parameters.invocation = { ...mockSdk.parameters.invocation, mode: 'unpublish' };
     const { getByText, container } = render(<Dialog />);

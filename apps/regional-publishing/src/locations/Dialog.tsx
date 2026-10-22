@@ -23,6 +23,8 @@ interface DialogInvocationParams {
   liveLocales?: string[];
   // Publish only: locales that must go out with this publish and can't be unticked.
   requiredLocales?: string[];
+  // Publish only: locales the user may add to this publish but that start unticked.
+  optionalLocales?: string[];
   allowedLocales: string[];
   excludedLocales: string[];
   localeStatus: Record<string, LocaleStatus>;
@@ -52,6 +54,7 @@ const Dialog = () => {
     defaultLocale,
     liveLocales = [],
     requiredLocales = [],
+    optionalLocales = [],
     allowedLocales,
     excludedLocales,
     localeStatus,
@@ -59,10 +62,10 @@ const Dialog = () => {
   } = sdk.parameters.invocation as unknown as DialogInvocationParams;
   const text = copy[mode];
 
-  // Publishing starts with every region ticked; unpublishing takes content down, so the user
-  // has to opt each region in.
+  // Publishing starts with every region ticked except optional ones; unpublishing takes content
+  // down, so the user has to opt each region in.
   const [selectedLocales, setSelectedLocales] = useState<string[]>(
-    mode === 'publish' ? allowedLocales : []
+    mode === 'publish' ? allowedLocales.filter(locale => !optionalLocales.includes(locale)) : []
   );
 
   const toggleLocale = (locale: string, checked: boolean) => {
@@ -104,6 +107,14 @@ const Dialog = () => {
           {requiredLocales.map(locale => localeNames[locale] ?? locale).join(', ')} has to be
           included, either because this entry has never been published or because its content is
           shared by every region.
+        </Note>
+      )}
+
+      {optionalLocales.length > 0 && (
+        <Note variant="neutral">
+          Your team owns this entry, so you can also publish{' '}
+          {optionalLocales.map(locale => localeNames[locale] ?? locale).join(', ')}. Tick it only
+          if those changes need to go live too.
         </Note>
       )}
 

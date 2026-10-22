@@ -5,8 +5,10 @@ import {
   Form,
   FormControl,
   Heading,
+  Note,
   Paragraph,
   Subheading,
+  Text,
 } from '@contentful/f36-components';
 import { useSDK } from '@contentful/react-apps-toolkit';
 import { css } from 'emotion';
@@ -23,14 +25,16 @@ const ConfigScreen = () => {
 
   const [roles, setRoles] = useState<Role[] | null>(null);
   const [roleLocaleMap, setRoleLocaleMap] = useState<Record<string, string[]>>({});
+  // Maintained by scripts/sync-role-members.mjs; only carried through here so saving keeps it.
+  const [roleMembers, setRoleMembers] = useState<Record<string, string[]>>({});
 
   const spaceLocales = sdk.locales.available;
 
   const onConfigure = useCallback(async () => {
     const currentState = await sdk.app.getCurrentState();
-    const parameters: AppInstallationParameters = { roleLocaleMap };
+    const parameters: AppInstallationParameters = { roleLocaleMap, roleMembers };
     return { parameters, targetState: currentState };
-  }, [sdk, roleLocaleMap]);
+  }, [sdk, roleLocaleMap, roleMembers]);
 
   useEffect(() => {
     sdk.app.onConfigure(() => onConfigure());
@@ -40,6 +44,7 @@ const ConfigScreen = () => {
     (async () => {
       const parameters = (await sdk.app.getParameters()) as AppInstallationParameters | null;
       setRoleLocaleMap(parameters?.roleLocaleMap ?? {});
+      setRoleMembers(parameters?.roleMembers ?? {});
 
       const { items } = await sdk.cma.role.getMany({});
       setRoles(items as Role[]);
@@ -66,12 +71,20 @@ const ConfigScreen = () => {
           Choose which locales each role is allowed to publish. Space admins can always publish
           every locale, regardless of this configuration.
         </Paragraph>
+        <Note variant="neutral">
+          A team can also publish the default locale of entries a teammate created. Who holds each
+          role is recorded by the app&apos;s sync-role-members script, not on this screen - re-run
+          it whenever someone joins or leaves a team.
+        </Note>
 
         {roles === null && <Paragraph>Loading roles…</Paragraph>}
 
         {roles?.map(role => (
           <FormControl key={role.sys.id}>
             <Subheading>{role.name}</Subheading>
+            <Text fontSize="fontSizeS" fontColor="gray500">
+              {(roleMembers[role.name] ?? []).length} members recorded
+            </Text>
             <Flex gap="spacingM" flexWrap="wrap">
               {spaceLocales.map(locale => (
                 <Checkbox

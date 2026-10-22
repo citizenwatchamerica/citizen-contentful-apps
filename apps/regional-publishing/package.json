@@ -18,6 +18,7 @@
     "build": "tsc && vite build",
     "test": "vitest",
     "test:ci": "vitest run",
+    "sync-role-members": "node scripts/sync-role-members.mjs",
     "create-app-definition": "contentful-app-scripts create-app-definition",
     "add-locations": "contentful-app-scripts add-locations",
     "deploy": "contentful-app-scripts --ci upload --bundle-dir ./dist --organization-id ${CONTENTFUL_ORG_ID} --definition-id ${CONTENTFUL_APP_DEF_ID} --token ${CONTENTFUL_ACCESS_TOKEN}",
