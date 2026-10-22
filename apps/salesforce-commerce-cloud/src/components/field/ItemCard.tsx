@@ -14,6 +14,8 @@ import { AppInstallationParameters } from '../../locations/ConfigScreen';
 import SfccClient, { parseCategoryId } from '../../utils/Sfcc';
 import { SiteMap } from '../../utils/siteMap';
 import { getLocalizedValue } from '../../utils/localized';
+import { SiteStockBadges } from '../InventoryBadge';
+import { StockBySite } from './useStockBySite';
 
 interface ItemProps {
   id: string;
@@ -24,6 +26,7 @@ interface ItemProps {
 interface ItemCardProps extends ItemProps {
   siteId: string;
   siteMap?: SiteMap;
+  stockBySite?: StockBySite;
   withDragHandle?: boolean;
   dragHandleRender?: (props: {
     isDragging?: boolean;
@@ -77,6 +80,7 @@ const ItemCard = (props: ItemCardProps) => {
               id={props.id}
               type={props.type}
               sites={sites}
+              stockBySite={props.stockBySite}
               itemData={itemData}
               locale={sdk.field.locale}
               onRemove={props.onRemove}
@@ -94,6 +98,7 @@ interface ItemPreviewProps extends ItemProps {
   itemData: any;
   locale: string;
   sites: string[];
+  stockBySite?: StockBySite;
 }
 
 const ItemPreview = (props: ItemPreviewProps) => {
@@ -102,6 +107,11 @@ const ItemPreview = (props: ItemPreviewProps) => {
 
   const categoryStyle = css`
     margin-left: ${tokens.spacingXs};
+  `;
+
+  const badgeStyles = css`
+    align-self: flex-start;
+    margin-top: ${tokens.spacing2Xs};
   `;
 
   // const externalLink = props.type === 'product' ? 'https://example.com' : 'https://google.com'
@@ -144,6 +154,13 @@ const ItemPreview = (props: ItemPreviewProps) => {
             </>
           )}
         </Text>
+        {props.type === 'product' && props.stockBySite && (
+          <SiteStockBadges
+            stockBySite={props.stockBySite}
+            productId={itemData.id}
+            css={badgeStyles}
+          />
+        )}
         <ItemActions {...actionsProps} />
       </Flex>
     </>

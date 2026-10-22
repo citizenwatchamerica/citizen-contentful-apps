@@ -7,6 +7,7 @@ import { Note } from '@contentful/f36-components';
 import SelectItemAction from '../components/field/SelectItemAction';
 import SingleItem from '../components/field/SingleItem';
 import MultipleItems from '../components/field/MultipleItems';
+import { useStockBySite } from '../components/field/useStockBySite';
 
 import { KeyValueMap } from 'contentful-management';
 import { AppInstallationParameters, parseSiteIds } from './ConfigScreen';
@@ -34,6 +35,14 @@ const Field = () => {
   const [value, setValue] = useState<string | string[]>(sdk.field.getValue());
   const [siteMap, setSiteMap] = useState<SiteMap>(() => readSiteMap(sdk));
 
+  const productIds = !value ? [] : Array.isArray(value) ? value : [value];
+  const stockBySite = useStockBySite(
+    installParameters,
+    siteIds,
+    productIds,
+    fieldType === 'product'
+  );
+
   useEffect(() => {
     const valueChangeHandler = async (value: string | string[]) => {
       setValue(value);
@@ -58,9 +67,19 @@ const Field = () => {
       {value?.length && (
         <>
           {selectMultiple ? (
-            <MultipleItems value={value as string[]} siteId={siteIds[0]} siteMap={siteMap} />
+            <MultipleItems
+              value={value as string[]}
+              siteId={siteIds[0]}
+              siteMap={siteMap}
+              stockBySite={stockBySite}
+            />
           ) : (
-            <SingleItem value={value as string} siteId={siteIds[0]} siteMap={siteMap} />
+            <SingleItem
+              value={value as string}
+              siteId={siteIds[0]}
+              siteMap={siteMap}
+              stockBySite={stockBySite}
+            />
           )}
         </>
       )}
