@@ -8,10 +8,21 @@ vi.mock('@contentful/react-apps-toolkit', () => ({
   useAutoResizer: () => {},
 }));
 
+const ukParameters = {
+  roleLocaleMap: { 'UK Editor': ['en-GB'], 'US Editor': ['en-US'] },
+  roleMembers: { 'UK Editor': ['current-user', 'uk-teammate'], 'US Editor': ['us-editor'] },
+};
+const entryLink = (id: string) => ({ sys: { type: 'Link', linkType: 'Entry', id } });
+const linkingEntry = (createdBy: string, fields: Record<string, Record<string, unknown>>) => ({
+  sys: { id: 'linking-entry', createdBy: { sys: { id: createdBy } } },
+  fields,
+});
+
 describe('Sidebar component', () => {
   beforeEach(() => {
     mockSdk.dialogs.openCurrentApp.mockReset();
     mockSdk.cma.entry.publish.mockClear();
+    mockSdk.cma.entry.getMany.mockReset().mockResolvedValue({ items: [], total: 0 });
     mockSdk.entry.getSys.mockReturnValue({ version: 1 });
     mockSdk.contentType.fields = [{ id: 'title', localized: true }];
     mockSdk.entry.onSysChanged.mockReturnValue(() => {});
@@ -88,10 +99,53 @@ describe('Sidebar component', () => {
     );
   });
 
-  it("doesn't add the default locale when a regional editor didn't create the entry", async () => {
+  it("adds the default locale to the first publish of an entry a teammate on the same role created", async () => {
     mockSdk.user.spaceMembership = { admin: false, roles: [{ name: 'UK Editor' }] };
-    mockSdk.parameters.installation = { roleLocaleMap: { 'UK Editor': ['en-GB'] } };
-    mockSdk.entry.getSys.mockReturnValue({ version: 1, createdBy: { sys: { id: 'someone-else' } } });
+    mockSdk.parameters.installation = ukParameters;
+    mockSdk.entry.getSys.mockReturnValue({ version: 7, createdBy: { sys: { id: 'uk-teammate' } } });
+    mockSdk.dialogs.openCurrentApp.mockResolvedValue(['en-US', 'en-GB']);
+
+    const { getByRole, getByText } = render(<Sidebar />);
+    fireEvent.click(getByRole('button', { name: 'Publish' }));
+
+    await waitFor(() => expect(mockSdk.dialogs.openCurrentApp).toHaveBeenCalledTimes(1));
+    const { parameters } = mockSdk.dialogs.openCurrentApp.mock.calls[0][0];
+    expect(parameters.requiredLocales).toEqual(['en-US']);
+    expect(parameters.allowedLocales).toEqual(['en-US', 'en-GB']);
+    await waitFor(() => expect(getByText('Published en-US, en-GB.')).toBeTruthy());
+    // Only this entry is published - never anything it links to.
+    expect(mockSdk.cma.entry.publish).toHaveBeenCalledTimes(1);
+    expect(mockSdk.cma.entry.publish).toHaveBeenCalledWith(
+      { entryId: 'test-entry', locales: ['en-US', 'en-GB'] },
+      { sys: { id: 'test-entry', type: 'Entry', version: 7 } }
+    );
+  });
+
+  it("counts an entry as the team's when another team links to it only in the team's locale", async () => {
+    mockSdk.user.spaceMembership = { admin: false, roles: [{ name: 'UK Editor' }] };
+    mockSdk.parameters.installation = ukParameters;
+    mockSdk.entry.getSys.mockReturnValue({ version: 7, createdBy: { sys: { id: 'uk-teammate' } } });
+    mockSdk.cma.entry.getMany.mockResolvedValue({
+      items: [linkingEntry('us-admin', { slides: { 'en-GB': [entryLink('test-entry')] } })],
+      total: 1,
+    });
+    mockSdk.dialogs.openCurrentApp.mockResolvedValue(null);
+
+    const { getByRole } = render(<Sidebar />);
+    fireEvent.click(getByRole('button', { name: 'Publish' }));
+
+    await waitFor(() => expect(mockSdk.dialogs.openCurrentApp).toHaveBeenCalledTimes(1));
+    expect(mockSdk.dialogs.openCurrentApp.mock.calls[0][0].parameters.requiredLocales).toEqual(['en-US']);
+  });
+
+  it('offers the default locale unticked on later publishes of a team-owned entry', async () => {
+    mockSdk.user.spaceMembership = { admin: false, roles: [{ name: 'UK Editor' }] };
+    mockSdk.parameters.installation = ukParameters;
+    mockSdk.entry.getSys.mockReturnValue({
+      version: 5,
+      publishedVersion: 3,
+      createdBy: { sys: { id: 'uk-teammate' } },
+    });
     mockSdk.dialogs.openCurrentApp.mockResolvedValue(null);
 
     const { getByRole } = render(<Sidebar />);
@@ -99,17 +153,22 @@ describe('Sidebar component', () => {
 
     await waitFor(() => expect(mockSdk.dialogs.openCurrentApp).toHaveBeenCalledTimes(1));
     const { parameters } = mockSdk.dialogs.openCurrentApp.mock.calls[0][0];
-    expect(parameters.allowedLocales).toEqual(['en-GB']);
+    expect(parameters.allowedLocales).toEqual(['en-US', 'en-GB']);
+    expect(parameters.optionalLocales).toEqual(['en-US']);
     expect(parameters.requiredLocales).toBeUndefined();
   });
 
-  it("doesn't add the default locale once the entry has been published", async () => {
+  it("keeps a later publish to the team's locales when another team's content links to the entry in the default locale", async () => {
     mockSdk.user.spaceMembership = { admin: false, roles: [{ name: 'UK Editor' }] };
-    mockSdk.parameters.installation = { roleLocaleMap: { 'UK Editor': ['en-GB'] } };
+    mockSdk.parameters.installation = ukParameters;
     mockSdk.entry.getSys.mockReturnValue({
       version: 5,
       publishedVersion: 3,
       createdBy: { sys: { id: 'current-user' } },
+    });
+    mockSdk.cma.entry.getMany.mockResolvedValue({
+      items: [linkingEntry('us-admin', { slides: { 'en-US': [entryLink('test-entry')] } })],
+      total: 1,
     });
     mockSdk.dialogs.openCurrentApp.mockResolvedValue(null);
 
@@ -119,7 +178,56 @@ describe('Sidebar component', () => {
     await waitFor(() => expect(mockSdk.dialogs.openCurrentApp).toHaveBeenCalledTimes(1));
     const { parameters } = mockSdk.dialogs.openCurrentApp.mock.calls[0][0];
     expect(parameters.allowedLocales).toEqual(['en-GB']);
+    expect(parameters.optionalLocales).toBeUndefined();
     expect(parameters.requiredLocales).toBeUndefined();
+  });
+
+  it("keeps a later publish to the team's locales when another team created the entry", async () => {
+    mockSdk.user.spaceMembership = { admin: false, roles: [{ name: 'UK Editor' }] };
+    mockSdk.parameters.installation = ukParameters;
+    mockSdk.entry.getSys.mockReturnValue({
+      version: 5,
+      publishedVersion: 3,
+      createdBy: { sys: { id: 'us-editor' } },
+    });
+    mockSdk.dialogs.openCurrentApp.mockResolvedValue(null);
+
+    const { getByRole } = render(<Sidebar />);
+    fireEvent.click(getByRole('button', { name: 'Publish' }));
+
+    await waitFor(() => expect(mockSdk.dialogs.openCurrentApp).toHaveBeenCalledTimes(1));
+    const { parameters } = mockSdk.dialogs.openCurrentApp.mock.calls[0][0];
+    expect(parameters.allowedLocales).toEqual(['en-GB']);
+    expect(parameters.optionalLocales).toBeUndefined();
+  });
+
+  it("explains instead of failing when a first publish needs the default locale the team can't publish", async () => {
+    mockSdk.user.spaceMembership = { admin: false, roles: [{ name: 'UK Editor' }] };
+    mockSdk.parameters.installation = ukParameters;
+    mockSdk.entry.getSys.mockReturnValue({ version: 1, createdBy: { sys: { id: 'us-editor' } } });
+
+    const { getByRole, findByText } = render(<Sidebar />);
+    fireEvent.click(getByRole('button', { name: 'Publish' }));
+
+    await findByText(/has never been published, and its first publish has to include English \(United States\)/);
+    expect(mockSdk.dialogs.openCurrentApp).not.toHaveBeenCalled();
+    expect(mockSdk.cma.entry.publish).not.toHaveBeenCalled();
+  });
+
+  it('blocks the first publish of a team-created entry that another team links to in the default locale', async () => {
+    mockSdk.user.spaceMembership = { admin: false, roles: [{ name: 'UK Editor' }] };
+    mockSdk.parameters.installation = ukParameters;
+    mockSdk.entry.getSys.mockReturnValue({ version: 1, createdBy: { sys: { id: 'uk-teammate' } } });
+    mockSdk.cma.entry.getMany.mockResolvedValue({
+      items: [linkingEntry('us-admin', { slides: { 'en-US': [entryLink('test-entry')] } })],
+      total: 1,
+    });
+
+    const { getByRole, findByText } = render(<Sidebar />);
+    fireEvent.click(getByRole('button', { name: 'Publish' }));
+
+    await findByText(/has never been published/);
+    expect(mockSdk.dialogs.openCurrentApp).not.toHaveBeenCalled();
   });
 
   it('adds the default locale for any regional editor when the content type has no localized fields', async () => {

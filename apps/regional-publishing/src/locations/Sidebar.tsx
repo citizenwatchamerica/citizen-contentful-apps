@@ -14,7 +14,8 @@ import { useAutoResizer, useSDK } from '@contentful/react-apps-toolkit';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { getEntryStatus } from '../utils/entryStatus';
 import { getLocaleStatuses } from '../utils/localeStatus';
-import { AppInstallationParameters, getAllowedLocales } from '../utils/permissions';
+import { isSharedOutsideTeam } from '../utils/ownership';
+import { AppInstallationParameters, getAllowedLocales, getOwningRoles } from '../utils/permissions';
 import { publishLocales } from '../utils/publishLocales';
 import { unpublishEntry, unpublishLocales } from '../utils/unpublishLocales';
 import type { DialogMode } from './Dialog';
@@ -186,19 +187,51 @@ const Sidebar = () => {
     ]);
 
     // Contentful rejects an entry's first publish unless it includes the default locale, so it's
-    // locked in for that publish - and a regional editor publishing a new entry they created
-    // themselves gets it even though their role doesn't normally cover it.
+    // locked in for that publish. A regional team gets it for entries the team owns - created by
+    // the editor or a teammate on the same role, and not linked from other teams' content in a
+    // locale the team doesn't own - required on the first publish, optional after that.
     // A content type with no localized fields keeps all its content under the default locale,
     // so it's shared by every region: any editor publishes it with the default locale, every time.
+    const defaultLocale = sdk.locales.default;
     const { publishedVersion, createdBy } = sdk.entry.getSys();
+    const isFirstPublish = !publishedVersion;
     const isSharedContentType = !sdk.contentType.fields.some(field => field.localized);
-    const isFirstPublishAllowed =
-      !publishedVersion &&
-      (allowedLocales.includes(sdk.locales.default) || createdBy?.sys.id === sdk.user.sys.id);
+    const canPublishDefault = allowedLocales.includes(defaultLocale);
+
+    let teamOwnsEntry = false;
+    if (action === 'publish' && !isSharedContentType && !canPublishDefault) {
+      const owningRoles = getOwningRoles(
+        sdk.user.spaceMembership,
+        parameters,
+        createdBy?.sys.id,
+        sdk.user.sys.id
+      );
+      const teamLocales = owningRoles.flatMap(roleName => parameters?.roleLocaleMap?.[roleName] ?? []);
+      const isTeamMember = (userId: string | undefined) =>
+        !!userId &&
+        (userId === sdk.user.sys.id ||
+          owningRoles.some(roleName => (parameters?.roleMembers?.[roleName] ?? []).includes(userId)));
+
+      teamOwnsEntry =
+        owningRoles.length > 0 &&
+        !(await isSharedOutsideTeam(sdk.cma, sdk.ids.entry, teamLocales, isTeamMember));
+    }
+
     const requiredLocales =
-      action === 'publish' && (isSharedContentType || isFirstPublishAllowed)
-        ? [sdk.locales.default]
+      action === 'publish' &&
+      (isSharedContentType || (isFirstPublish && (canPublishDefault || teamOwnsEntry)))
+        ? [defaultLocale]
         : [];
+    const optionalLocales = action === 'publish' && !isFirstPublish && teamOwnsEntry ? [defaultLocale] : [];
+
+    if (action === 'publish' && isFirstPublish && requiredLocales.length === 0) {
+      setNotice(
+        `This entry has never been published, and its first publish has to include ${
+          localeNames[defaultLocale] ?? defaultLocale
+        }. That's only available to your team for entries it created that aren't shared with other regions, so ask an admin or the owning team to publish it first.`
+      );
+      return;
+    }
 
     // For unpublish, only regions that are actually live can be picked; the user's never-
     // published regions join the other teams' ones under "Not affected". A locale reads as
@@ -206,7 +239,12 @@ const Sidebar = () => {
     // empty and every allowed locale stays pickable rather than hiding the whole list.
     const dialogLocales =
       action === 'publish'
-        ? spaceLocales.filter(locale => allowedLocales.includes(locale) || requiredLocales.includes(locale))
+        ? spaceLocales.filter(
+            locale =>
+              allowedLocales.includes(locale) ||
+              requiredLocales.includes(locale) ||
+              optionalLocales.includes(locale)
+          )
         : allowedLocales.filter(locale => localeStatus[locale] !== 'draft');
     // Every locale live right now, across all teams. Empty when the status fetch failed.
     const liveLocales = spaceLocales.filter(
@@ -232,6 +270,7 @@ const Sidebar = () => {
           liveLocales,
         }),
         ...(requiredLocales.length > 0 && { requiredLocales }),
+        ...(optionalLocales.length > 0 && { optionalLocales }),
         allowedLocales: dialogLocales,
         excludedLocales: spaceLocales.filter(locale => !dialogLocales.includes(locale)),
         localeStatus,

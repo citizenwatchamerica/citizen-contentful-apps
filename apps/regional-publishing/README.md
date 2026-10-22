@@ -14,9 +14,20 @@ never accidentally ship another team's in-progress edits in a different locale.
   reverse through `remove.fields` on the same endpoint: it offers only the user's currently
   published locales and takes down just the ones they pick. Unpublishing every locale that's
   still live leaves the entry fully unpublished, same as the native button.
+- **Team-owned entries**: an entry belongs to a regional team when it was created by the editor
+  or by a teammate on the same role (checked against `roleMembers`, see below), and no other
+  team's content links to it in a locale the team doesn't own. A UK slide placed in a US slider's
+  en-GB field still counts as the UK team's; one in the slider's en-US field doesn't. Links are
+  followed upwards through teammates' entries, and anything that can't be fully checked counts
+  as shared. The entry's name is never used.
 - **First publish**: Contentful requires an entry's first publish to include the default locale,
-  so it's locked on in the dialog for that publish. A regional editor publishing a new entry they
-  created themselves gets the default locale added even though their role doesn't cover it.
+  so it's locked on in the dialog for that publish. A regional team gets it for entries it owns,
+  even though its role doesn't otherwise cover the default locale. Otherwise the sidebar explains
+  that an admin or the owning team has to publish it first, instead of letting it fail.
+- **Later publishes**: on a team-owned entry the default locale is offered unticked, so the team
+  publishes just its own locales unless it opts in.
+- **Linked entries** are never published along with the entry. Each one is checked on its own
+  when someone publishes it from its own sidebar.
 - **Shared content types**: a content type with no localized fields keeps everything under the
   default locale, so any regional editor publishes it with the default locale on every publish,
   whoever created the entry.
@@ -30,6 +41,21 @@ npm start
 
 Then follow Contentful's [app development guide](https://www.contentful.com/developers/docs/extensibility/app-framework/tutorial/#embed-your-app-in-the-contentful-web-app)
 to connect the running dev server to a real space/entry.
+
+## Role members
+
+The sidebar needs to know which role an entry's creator holds, but non-admins can't read other
+users' memberships and the App SDK's CMA client doesn't expose them. A space admin records them
+in the installation's `roleMembers` parameter instead (team-based access included):
+
+```bash
+npm run sync-role-members -- --space <space id>          # dry run
+npm run sync-role-members -- --space <space id> --apply  # save
+```
+
+It uses `CONTENTFUL_MANAGEMENT_TOKEN`, or the token from `contentful login`. Re-run it whenever
+someone joins or leaves a team. Until then, a newcomer's entries only count as team-owned when
+they publish them themselves. Saving the config screen keeps the recorded list.
 
 ## Manual setup still required (not automated by this app)
 
