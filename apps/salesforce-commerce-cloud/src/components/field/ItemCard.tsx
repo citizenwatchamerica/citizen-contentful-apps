@@ -13,6 +13,7 @@ import { FieldAppSDK } from '@contentful/app-sdk';
 import { AppInstallationParameters } from '../../locations/ConfigScreen';
 import SfccClient, { parseCategoryId } from '../../utils/Sfcc';
 import { SiteMap } from '../../utils/siteMap';
+import { getLocalizedValue } from '../../utils/localized';
 
 interface ItemProps {
   id: string;
@@ -77,6 +78,7 @@ const ItemCard = (props: ItemCardProps) => {
               type={props.type}
               sites={sites}
               itemData={itemData}
+              locale={sdk.field.locale}
               onRemove={props.onRemove}
             />
           ) : (
@@ -90,6 +92,7 @@ const ItemCard = (props: ItemCardProps) => {
 
 interface ItemPreviewProps extends ItemProps {
   itemData: any;
+  locale: string;
   sites: string[];
 }
 
@@ -122,7 +125,7 @@ const ItemPreview = (props: ItemPreviewProps) => {
       )}
       <Flex flexDirection="column" marginLeft="spacingS">
         <Text as="div" fontWeight="fontWeightDemiBold" fontSize="fontSizeM">
-          {itemData.name?.default || 'Untitled Item'}
+          {getLocalizedValue(itemData.name, props.locale) || 'Untitled Item'}
         </Text>
         <Text as="div" fontWeight="fontWeightMedium" fontSize="fontSizeS" fontColor="gray600">
           ID: {itemData.id}
