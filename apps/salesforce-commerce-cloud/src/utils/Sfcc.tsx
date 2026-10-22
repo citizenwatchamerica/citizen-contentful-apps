@@ -15,6 +15,11 @@ interface SFCCAdminToken {
   token_type: string;
 }
 
+export interface ProductAvailability {
+  ats?: number;
+  inStock?: boolean;
+}
+
 interface TokenProps {
   tokenInfo: SFCCAdminToken;
   expiry: Date;
@@ -117,7 +122,9 @@ class SfccClient {
               termQuery: {
                 fields: ['type'],
                 operator: 'one_of',
-                values: ['bundle','item','master','option','retailSet','set','variant','variationGroup'],
+                // 'retailSet' is listed in the SCAPI docs but rejected by the API
+                // as an illegal ProductTypeEnum value, failing the whole search.
+                values: ['bundle', 'item', 'master', 'option', 'set', 'variant', 'variationGroup'],
               },
             },
           ],
@@ -149,6 +156,43 @@ class SfccClient {
     );
 
     return searchResults.hits?.length ? searchResults.hits : [];
+  };
+
+  // Stock for many products on this client's site in one request: with a siteId,
+  // search hits carry that site's ats and inStock. Products the search does not
+  // return are absent from the result.
+  public fetchAvailabilityByProduct = async (
+    productIds: string[]
+  ): Promise<Record<string, ProductAvailability>> => {
+    if (!productIds.length) return {};
+
+    const { organizationId } = this.parameters;
+
+    const { data: searchResults } = await this.client.post(
+      `/product/products/v1/organizations/${organizationId}/product-search`,
+      {
+        query: {
+          termQuery: {
+            fields: ['id'],
+            operator: 'one_of',
+            values: productIds,
+          },
+        },
+        // Only stock is needed; the default expand returns whole product records.
+        expand: ['availability'],
+        limit: productIds.length,
+      },
+      {
+        params: { siteId: this.siteId },
+      }
+    );
+
+    return Object.fromEntries(
+      (searchResults.hits || []).map((hit: any) => [
+        hit.id,
+        { ats: hit.ats, inStock: hit.inStock },
+      ])
+    );
   };
 
   private fetchCatalogs = async (): Promise<any[]> => {

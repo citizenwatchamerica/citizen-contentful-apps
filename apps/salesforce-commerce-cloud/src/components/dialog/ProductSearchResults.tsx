@@ -5,6 +5,8 @@ import { Box, Flex, SkeletonContainer, SkeletonImage } from '@contentful/f36-com
 import { AssetIcon } from '@contentful/f36-icons';
 import tokens from '@contentful/f36-tokens';
 
+import InventoryBadge from '../InventoryBadge';
+
 import {
   SearchResultsProps,
   SearchResultProps,
@@ -114,6 +116,11 @@ const ProductSearchResult = (props: SearchResultProps) => {
     white-space: nowrap;
   `;
 
+  const badgeStyles = css`
+    align-self: flex-start;
+    margin-top: ${tokens.spacing2Xs};
+  `;
+
   const productStylesCss = [productStyles];
   if (isSelected) {
     productStylesCss.push(selectedProductStyles);
@@ -153,6 +160,7 @@ const ProductSearchResult = (props: SearchResultProps) => {
         <p css={resultNameStyles}>{result.name?.default || 'Untitled Product'}</p>
         <p css={resultIdStyles}>ID: {result.id}</p>
         {fieldType === 'category' && <p css={resultIdStyles}>Catalog ID: {result.catalogId}</p>}
+        {fieldType === 'product' && <InventoryBadge availability={result} css={badgeStyles} />}
       </div>
     </Flex>
   );

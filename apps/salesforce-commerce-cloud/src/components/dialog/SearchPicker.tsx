@@ -158,24 +158,37 @@ const SearchPicker = () => {
   };
 
   useEffect(() => {
+    // Set once a newer query or site supersedes this one. An earlier, slower
+    // request can resolve after a later one and would otherwise overwrite it.
+    let isStale = false;
+
     const timeOutId = setTimeout(() => {
       const client = new SfccClient(installParameters, selectedSiteId);
       const fetchResults =
         fieldType === 'product' ? client.searchProducts : client.searchCategories;
-      if (query.length >= 3) {
-        setQueryIsFetching(true);
-        fetchResults(query)
-          .then((results: any[]) => setSearchResults(results))
-          .finally(() => setQueryIsFetching(false));
-      } else {
-        setQueryIsFetching(true);
-        fetchResults()
-          .then((results: any[]) => setSearchResults(results))
-          .finally(() => setQueryIsFetching(false));
-      }
+
+      setQueryIsFetching(true);
+      fetchResults(query.length >= 3 ? query : undefined)
+        .then((results: any[]) => {
+          if (!isStale) setSearchResults(results);
+        })
+        .catch(() => {
+          if (isStale) return;
+          // Clear rather than keep the previous results, which would look like
+          // the answer to this query.
+          setSearchResults([]);
+          sdk.notifier.error('Search failed. Try again, or check the app configuration.');
+        })
+        .finally(() => {
+          if (!isStale) setQueryIsFetching(false);
+        });
     }, 500);
-    return () => clearTimeout(timeOutId);
-  }, [fieldType, query, installParameters, selectedSiteId]);
+
+    return () => {
+      isStale = true;
+      clearTimeout(timeOutId);
+    };
+  }, [fieldType, query, installParameters, selectedSiteId, sdk]);
 
   const selectionLimitMessage = getProductSelectionLimitMessage(
     fieldType,
