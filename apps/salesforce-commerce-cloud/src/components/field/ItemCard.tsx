@@ -13,6 +13,7 @@ import { FieldAppSDK } from '@contentful/app-sdk';
 import { AppInstallationParameters } from '../../locations/ConfigScreen';
 import SfccClient, { parseCategoryId } from '../../utils/Sfcc';
 import { SiteMap } from '../../utils/siteMap';
+import InventoryBadge from '../InventoryBadge';
 
 interface ItemProps {
   id: string;
@@ -101,6 +102,11 @@ const ItemPreview = (props: ItemPreviewProps) => {
     margin-left: ${tokens.spacingXs};
   `;
 
+  const badgeStyles = css`
+    align-self: flex-start;
+    margin-top: ${tokens.spacing2Xs};
+  `;
+
   // const externalLink = props.type === 'product' ? 'https://example.com' : 'https://google.com'
   const actionsProps: ItemActionsProps = {
     id: props.id,
@@ -141,6 +147,10 @@ const ItemPreview = (props: ItemPreviewProps) => {
             </>
           )}
         </Text>
+        {props.type === 'product' && (
+          // getProduct with a siteId already carries ats/inStock for that site.
+          <InventoryBadge availability={itemData} css={badgeStyles} />
+        )}
         <ItemActions {...actionsProps} />
       </Flex>
     </>

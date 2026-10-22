@@ -15,6 +15,11 @@ interface SFCCAdminToken {
   token_type: string;
 }
 
+export interface ProductAvailability {
+  ats?: number;
+  inStock?: boolean;
+}
+
 interface TokenProps {
   tokenInfo: SFCCAdminToken;
   expiry: Date;
