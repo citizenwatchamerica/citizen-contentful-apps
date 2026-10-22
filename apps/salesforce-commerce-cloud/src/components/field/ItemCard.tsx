@@ -13,7 +13,8 @@ import { FieldAppSDK } from '@contentful/app-sdk';
 import { AppInstallationParameters } from '../../locations/ConfigScreen';
 import SfccClient, { parseCategoryId } from '../../utils/Sfcc';
 import { SiteMap } from '../../utils/siteMap';
-import InventoryBadge from '../InventoryBadge';
+import { SiteStockBadges } from '../InventoryBadge';
+import { StockBySite } from './useStockBySite';
 
 interface ItemProps {
   id: string;
@@ -24,6 +25,7 @@ interface ItemProps {
 interface ItemCardProps extends ItemProps {
   siteId: string;
   siteMap?: SiteMap;
+  stockBySite?: StockBySite;
   withDragHandle?: boolean;
   dragHandleRender?: (props: {
     isDragging?: boolean;
@@ -77,6 +79,7 @@ const ItemCard = (props: ItemCardProps) => {
               id={props.id}
               type={props.type}
               sites={sites}
+              stockBySite={props.stockBySite}
               itemData={itemData}
               onRemove={props.onRemove}
             />
@@ -92,6 +95,7 @@ const ItemCard = (props: ItemCardProps) => {
 interface ItemPreviewProps extends ItemProps {
   itemData: any;
   sites: string[];
+  stockBySite?: StockBySite;
 }
 
 const ItemPreview = (props: ItemPreviewProps) => {
@@ -147,9 +151,12 @@ const ItemPreview = (props: ItemPreviewProps) => {
             </>
           )}
         </Text>
-        {props.type === 'product' && (
-          // getProduct with a siteId already carries ats/inStock for that site.
-          <InventoryBadge availability={itemData} css={badgeStyles} />
+        {props.type === 'product' && props.stockBySite && (
+          <SiteStockBadges
+            stockBySite={props.stockBySite}
+            productId={itemData.id}
+            css={badgeStyles}
+          />
         )}
         <ItemActions {...actionsProps} />
       </Flex>

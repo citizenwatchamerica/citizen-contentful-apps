@@ -158,6 +158,43 @@ class SfccClient {
     return searchResults.hits?.length ? searchResults.hits : [];
   };
 
+  // Stock for many products on this client's site in one request: with a siteId,
+  // search hits carry that site's ats and inStock. Products the search does not
+  // return are absent from the result.
+  public fetchAvailabilityByProduct = async (
+    productIds: string[]
+  ): Promise<Record<string, ProductAvailability>> => {
+    if (!productIds.length) return {};
+
+    const { organizationId } = this.parameters;
+
+    const { data: searchResults } = await this.client.post(
+      `/product/products/v1/organizations/${organizationId}/product-search`,
+      {
+        query: {
+          termQuery: {
+            fields: ['id'],
+            operator: 'one_of',
+            values: productIds,
+          },
+        },
+        // Only stock is needed; the default expand returns whole product records.
+        expand: ['availability'],
+        limit: productIds.length,
+      },
+      {
+        params: { siteId: this.siteId },
+      }
+    );
+
+    return Object.fromEntries(
+      (searchResults.hits || []).map((hit: any) => [
+        hit.id,
+        { ats: hit.ats, inStock: hit.inStock },
+      ])
+    );
+  };
+
   private fetchCatalogs = async (): Promise<any[]> => {
     const cacheKey = 'sfcc-catalogs';
     const cached = sessionStorage.getItem(cacheKey);

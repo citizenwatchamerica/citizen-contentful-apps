@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { getInventoryBadge } from './InventoryBadge';
+import { getInventoryBadge, getSiteStockBadges } from './InventoryBadge';
 
 describe('getInventoryBadge', () => {
   it('shows the available-to-sell count when stock is positive', () => {
@@ -18,5 +18,31 @@ describe('getInventoryBadge', () => {
     expect(getInventoryBadge(undefined)).toBeNull();
     expect(getInventoryBadge(null)).toBeNull();
     expect(getInventoryBadge({ inStock: true })).toBeNull();
+  });
+});
+
+describe('getSiteStockBadges', () => {
+  it('labels each site and keeps the configured site order', () => {
+    const stockBySite = {
+      bulova: { '96B482': { ats: 66, inStock: true } },
+      bulova_ca: { '96B482': { ats: 0, inStock: false } },
+    };
+
+    expect(getSiteStockBadges(stockBySite, '96B482')).toEqual([
+      { siteId: 'bulova', label: 'bulova: 66 available', variant: 'positive' },
+      { siteId: 'bulova_ca', label: 'bulova_ca: Out of stock', variant: 'negative' },
+    ]);
+  });
+
+  it('leaves out sites that are still loading, failed, or did not return the product', () => {
+    const stockBySite = {
+      bulova: { '96B482': { ats: 3 } },
+      bulova_ca: undefined,
+      bulova_mx: {},
+    };
+
+    expect(getSiteStockBadges(stockBySite, '96B482').map((badge) => badge.siteId)).toEqual([
+      'bulova',
+    ]);
   });
 });
