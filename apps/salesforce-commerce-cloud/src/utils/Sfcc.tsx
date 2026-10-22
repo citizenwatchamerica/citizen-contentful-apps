@@ -122,7 +122,9 @@ class SfccClient {
               termQuery: {
                 fields: ['type'],
                 operator: 'one_of',
-                values: ['bundle','item','master','option','retailSet','set','variant','variationGroup'],
+                // 'retailSet' is listed in the SCAPI docs but rejected by the API
+                // as an illegal ProductTypeEnum value, failing the whole search.
+                values: ['bundle', 'item', 'master', 'option', 'set', 'variant', 'variationGroup'],
               },
             },
           ],
