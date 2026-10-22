@@ -4,7 +4,11 @@ import { css } from '@emotion/react';
 import tokens from '@contentful/f36-tokens';
 import { Box, Card, Flex, Text } from '@contentful/f36-components';
 import { TagsIcon } from '@contentful/f36-icons';
+import { useSDK } from '@contentful/react-apps-toolkit';
+import { DialogAppSDK } from '@contentful/app-sdk';
 
+import { DialogInvocationParameters } from '../../locations/Dialog';
+import { getLocalizedValue } from '../../utils/localized';
 import {
   SearchResultsProps,
   SearchResultProps,
@@ -38,6 +42,8 @@ const CategorySearchResults = (props: SearchResultsProps) => {
 const CategorySearchResult = (props: SearchResultProps) => {
   const { result, fieldType, onItemSelect, selected } = props;
   const resultId = result.id;
+  const sdk = useSDK<DialogAppSDK>();
+  const { locale } = sdk.parameters.invocation as DialogInvocationParameters;
 
   const categoryStyle = css`
     margin-left: ${tokens.spacingXs};
@@ -55,7 +61,7 @@ const CategorySearchResult = (props: SearchResultProps) => {
           <TagsIcon />
           <Flex flexDirection="column" marginLeft="spacingS">
             <Text as="div" fontWeight="fontWeightDemiBold" fontSize="fontSizeM">
-              {result.name?.default || 'Untitled Category'}
+              {getLocalizedValue(result.name, locale) || 'Untitled Category'}
             </Text>
             <Text as="div" fontWeight="fontWeightMedium" fontSize="fontSizeS" fontColor="gray600">
               ID: {result.id}

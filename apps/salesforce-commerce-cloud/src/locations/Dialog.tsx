@@ -13,6 +13,8 @@ export interface DialogInvocationParameters extends KeyValueMap {
   currentData?: any | any[];
   siteIds: string[];
   siteMap?: SiteMap;
+  // The calling field's locale, used to pick a name when SFCC has no default one.
+  locale?: string;
 }
 
 const Dialog = () => {

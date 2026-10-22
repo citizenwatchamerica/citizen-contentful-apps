@@ -4,7 +4,11 @@ import { css } from '@emotion/react';
 import { Box, Flex, SkeletonContainer, SkeletonImage } from '@contentful/f36-components';
 import { AssetIcon } from '@contentful/f36-icons';
 import tokens from '@contentful/f36-tokens';
+import { useSDK } from '@contentful/react-apps-toolkit';
+import { DialogAppSDK } from '@contentful/app-sdk';
 
+import { DialogInvocationParameters } from '../../locations/Dialog';
+import { getLocalizedValue } from '../../utils/localized';
 import InventoryBadge from '../InventoryBadge';
 
 import {
@@ -48,6 +52,8 @@ const ProductSearchResults = (props: SearchResultsProps) => {
 const ProductSearchResult = (props: SearchResultProps) => {
   const { result, fieldType, onItemSelect, selected } = props;
   const resultId = result.id;
+  const sdk = useSDK<DialogAppSDK>();
+  const { locale } = sdk.parameters.invocation as DialogInvocationParameters;
   const isSelected =
     typeof selected === 'string' ? selected === resultId : selected?.includes(resultId);
 
@@ -157,7 +163,7 @@ const ProductSearchResult = (props: SearchResultProps) => {
             />
           </div>
         )}
-        <p css={resultNameStyles}>{result.name?.default || 'Untitled Product'}</p>
+        <p css={resultNameStyles}>{getLocalizedValue(result.name, locale) || 'Untitled Product'}</p>
         <p css={resultIdStyles}>ID: {result.id}</p>
         {fieldType === 'category' && <p css={resultIdStyles}>Catalog ID: {result.catalogId}</p>}
         {fieldType === 'product' && <InventoryBadge availability={result} css={badgeStyles} />}
