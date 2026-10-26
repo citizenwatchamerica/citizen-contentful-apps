@@ -5,15 +5,17 @@ const MAX_DEPTH = 5;
 const MAX_ENTRIES = 25;
 const PAGE_SIZE = 100;
 
-const linksToEntry = (value: unknown, entryId: string): boolean => {
-  if (Array.isArray(value)) return value.some(item => linksToEntry(item, entryId));
+export type LinkType = 'Entry' | 'Asset';
+
+const linksTo = (value: unknown, id: string, linkType: LinkType): boolean => {
+  if (Array.isArray(value)) return value.some(item => linksTo(item, id, linkType));
   if (!value || typeof value !== 'object') return false;
 
   const sys = (value as { sys?: { type?: string; linkType?: string; id?: string } }).sys;
-  if (sys?.type === 'Link' && sys.linkType === 'Entry' && sys.id === entryId) return true;
+  if (sys?.type === 'Link' && sys.linkType === linkType && sys.id === id) return true;
 
   // Covers rich text too, where embedded entries sit deeper under `content[].data.target`.
-  return Object.values(value).some(child => linksToEntry(child, entryId));
+  return Object.values(value).some(child => linksTo(child, id, linkType));
 };
 
 // Whether an entry can surface anywhere outside its owning team's locales, by walking the
@@ -22,29 +24,32 @@ const linksToEntry = (value: unknown, entryId: string): boolean => {
 // link in any other locale - including a non-localized field, which lives under the default
 // locale - is fine only when the linking entry is itself team-owned and passes the same check.
 // Anything it can't fully verify (a failed lookup, too many links, too deep) counts as shared.
+// Works for an asset too - only the first hop differs, since only entries can link onwards.
 export const isSharedOutsideTeam = async (
   cma: CMAClient,
-  entryId: string,
+  entityId: string,
   teamLocales: string[],
-  isTeamMember: (userId: string | undefined) => boolean
+  isTeamMember: (userId: string | undefined) => boolean,
+  linkType: LinkType = 'Entry'
 ): Promise<boolean> => {
-  const visited = new Set([entryId]);
-  let frontier = [entryId];
+  const visited = new Set([entityId]);
+  let frontier: Array<{ id: string; linkType: LinkType }> = [{ id: entityId, linkType }];
 
   try {
     for (let depth = 0; depth < MAX_DEPTH && frontier.length > 0; depth++) {
-      const nextFrontier: string[] = [];
+      const nextFrontier: typeof frontier = [];
 
-      for (const childId of frontier) {
+      for (const child of frontier) {
+        const linkQuery = child.linkType === 'Asset' ? { links_to_asset: child.id } : { links_to_entry: child.id };
         const { items, total } = await cma.entry.getMany({
-          query: { links_to_entry: childId, limit: PAGE_SIZE },
+          query: { ...linkQuery, limit: PAGE_SIZE },
         });
         if (total > items.length) return true;
 
         for (const parent of items) {
           const linksOutsideTeamLocales = Object.values(parent.fields ?? {}).some(field =>
             Object.entries(field ?? {}).some(
-              ([locale, value]) => !teamLocales.includes(locale) && linksToEntry(value, childId)
+              ([locale, value]) => !teamLocales.includes(locale) && linksTo(value, child.id, child.linkType)
             )
           );
           if (!linksOutsideTeamLocales) continue;
@@ -52,7 +57,7 @@ export const isSharedOutsideTeam = async (
 
           if (!visited.has(parent.sys.id)) {
             visited.add(parent.sys.id);
-            nextFrontier.push(parent.sys.id);
+            nextFrontier.push({ id: parent.sys.id, linkType: 'Entry' });
           }
         }
       }

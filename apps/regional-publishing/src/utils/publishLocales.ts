@@ -17,3 +17,16 @@ export const publishLocales = async (
     { sys: { id: entryId, type: 'Entry', version } }
   );
 };
+
+// Same selective-locale publish for an asset; the live API takes `locales` for assets too.
+export const publishAssetLocales = async (
+  cma: CMAClient,
+  assetId: string,
+  version: number,
+  locales: string[]
+): Promise<void> => {
+  await (cma.asset.publish as any)(
+    { assetId, locales },
+    { sys: { id: assetId, type: 'Asset', version } }
+  );
+};

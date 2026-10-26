@@ -26,8 +26,15 @@ never accidentally ship another team's in-progress edits in a different locale.
   that an admin or the owning team has to publish it first, instead of letting it fail.
 - **Later publishes**: on a team-owned entry the default locale is offered unticked, so the team
   publishes just its own locales unless it opts in.
-- **Linked entries** are never published along with the entry. Each one is checked on its own
-  when someone publishes it from its own sidebar.
+- **Linked content**: the publish dialog lists every draft or changed entry and asset this entry
+  references, directly or through other linked entries, grouped by the reference field it comes
+  through. Each one starts ticked and can be unticked. Only links that show in the ticked regions
+  count, following locale fallbacks, so a slide in a slider's en-US field isn't offered to the UK
+  team. Ticked items are published first, deepest first, in the same locales as the entry. A
+  never-published item gets the default locale under the same ownership rule as the entry itself.
+  An item that can't be published is listed after the publish and doesn't stop the entry going
+  out. The walk stops at 100 items or 6 levels deep, and the dialog says when the list may be
+  incomplete.
 - **Shared content types**: a content type with no localized fields keeps everything under the
   default locale, so any regional editor publishes it with the default locale on every publish,
   whoever created the entry.
