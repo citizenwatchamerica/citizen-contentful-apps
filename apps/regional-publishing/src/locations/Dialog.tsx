@@ -9,12 +9,19 @@ import {
   Note,
   Paragraph,
   Subheading,
+  Text,
 } from '@contentful/f36-components';
 import { useSDK } from '@contentful/react-apps-toolkit';
 import { useState } from 'react';
+import type { LinkedItem } from '../utils/linkedContent';
 import { LocaleStatus } from '../utils/localeStatus';
 
 export type DialogMode = 'publish' | 'unpublish';
+
+export interface PublishSelection {
+  locales: string[];
+  linkedIds: string[];
+}
 
 interface DialogInvocationParams {
   mode?: DialogMode;
@@ -25,6 +32,10 @@ interface DialogInvocationParams {
   requiredLocales?: string[];
   // Publish only: locales the user may add to this publish but that start unticked.
   optionalLocales?: string[];
+  // Publish only: draft/changed content the entry links to, offered for publishing alongside it.
+  linkedItems?: LinkedItem[];
+  linkedIncomplete?: boolean;
+  fieldNames?: Record<string, string>;
   allowedLocales: string[];
   excludedLocales: string[];
   localeStatus: Record<string, LocaleStatus>;
@@ -55,6 +66,9 @@ const Dialog = () => {
     liveLocales = [],
     requiredLocales = [],
     optionalLocales = [],
+    linkedItems = [],
+    linkedIncomplete = false,
+    fieldNames = {},
     allowedLocales,
     excludedLocales,
     localeStatus,
@@ -71,6 +85,25 @@ const Dialog = () => {
   const toggleLocale = (locale: string, checked: boolean) => {
     setSelectedLocales(prev => (checked ? [...prev, locale] : prev.filter(l => l !== locale)));
   };
+
+  // Linked items start ticked; only the ones the user unticks are tracked.
+  const [uncheckedLinkedIds, setUncheckedLinkedIds] = useState<string[]>([]);
+  const toggleLinked = (id: string, checked: boolean) => {
+    setUncheckedLinkedIds(prev => (checked ? prev.filter(uncheckedId => uncheckedId !== id) : [...prev, id]));
+  };
+
+  // An item linked only in regions that aren't ticked won't show anywhere new, so it's hidden.
+  const visibleLinkedItems = linkedItems.filter(item =>
+    item.locales.some(locale => selectedLocales.includes(locale))
+  );
+  const selectedLinkedIds = visibleLinkedItems
+    .filter(item => !uncheckedLinkedIds.includes(item.id))
+    .map(item => item.id);
+
+  const linkedItemsByField = visibleLinkedItems.reduce<Record<string, LinkedItem[]>>((groups, item) => {
+    const fieldId = item.fieldIds[0] ?? '';
+    return { ...groups, [fieldId]: [...(groups[fieldId] ?? []), item] };
+  }, {});
 
   const allSelected = selectedLocales.length === allowedLocales.length;
 
@@ -110,6 +143,43 @@ const Dialog = () => {
         </Note>
       )}
 
+      {mode === 'publish' && visibleLinkedItems.length > 0 && (
+        <Flex flexDirection="column" gap="spacingXs">
+          <Subheading marginBottom="none">
+            Also publish linked content ({selectedLinkedIds.length} of {visibleLinkedItems.length})
+          </Subheading>
+          <Text fontSize="fontSizeS" fontColor="gray600">
+            These are referenced by this entry and have unpublished changes. Untick anything that
+            isn&apos;t ready - it stays as it is.
+          </Text>
+          {Object.entries(linkedItemsByField).map(([fieldId, items]) => (
+            <Flex key={fieldId} flexDirection="column" gap="spacingXs">
+              <Text fontWeight="fontWeightDemiBold">{fieldNames[fieldId] ?? fieldId}</Text>
+              {items.map(item => (
+                <Flex key={item.id} alignItems="center" gap="spacingXs">
+                  <Checkbox
+                    id={`dialog-linked-${item.id}`}
+                    isChecked={!uncheckedLinkedIds.includes(item.id)}
+                    onChange={e => toggleLinked(item.id, (e.target as HTMLInputElement).checked)}
+                  >
+                    {item.title}
+                    {item.type === 'Asset' && ' (media)'}
+                  </Checkbox>
+                  <EntityStatusBadge entityStatus={item.status} />
+                </Flex>
+              ))}
+            </Flex>
+          ))}
+        </Flex>
+      )}
+
+      {mode === 'publish' && linkedIncomplete && (
+        <Note variant="warning">
+          Not everything this entry links to could be checked, so some linked content may not be
+          listed. Anything missing here stays as it is.
+        </Note>
+      )}
+
       {optionalLocales.length > 0 && (
         <Note variant="neutral">
           Your team owns this entry, so you can also publish{' '}
@@ -129,7 +199,13 @@ const Dialog = () => {
         variant={mode === 'publish' ? 'positive' : 'negative'}
         isFullWidth
         isDisabled={selectedLocales.length === 0 || defaultLocaleBlocked}
-        onClick={() => sdk.close(selectedLocales)}
+        onClick={() =>
+          sdk.close(
+            mode === 'publish'
+              ? ({ locales: selectedLocales, linkedIds: selectedLinkedIds } satisfies PublishSelection)
+              : selectedLocales
+          )
+        }
       >
         {`${allSelected ? text.all : text.selected} (${selectedLocales.length})`}
       </Button>

@@ -57,7 +57,7 @@ describe('Sidebar component', () => {
   it('opens the review dialog with the allowed and excluded locales, then publishes what the dialog returns', async () => {
     mockSdk.user.spaceMembership = { admin: false, roles: [{ name: 'US Editor' }] };
     mockSdk.parameters.installation = { roleLocaleMap: { 'US Editor': ['en-US'] } };
-    mockSdk.dialogs.openCurrentApp.mockResolvedValue(['en-US']);
+    mockSdk.dialogs.openCurrentApp.mockResolvedValue({ locales: ['en-US'], linkedIds: [] });
 
     const { getByText, getByRole } = render(<Sidebar />);
     fireEvent.click(getByRole('button', { name: 'Publish' }));
@@ -82,7 +82,7 @@ describe('Sidebar component', () => {
     mockSdk.user.spaceMembership = { admin: false, roles: [{ name: 'UK Editor' }] };
     mockSdk.parameters.installation = { roleLocaleMap: { 'UK Editor': ['en-GB'] } };
     mockSdk.entry.getSys.mockReturnValue({ version: 1, createdBy: { sys: { id: 'current-user' } } });
-    mockSdk.dialogs.openCurrentApp.mockResolvedValue(['en-US', 'en-GB']);
+    mockSdk.dialogs.openCurrentApp.mockResolvedValue({ locales: ['en-US', 'en-GB'], linkedIds: [] });
 
     const { getByRole } = render(<Sidebar />);
     fireEvent.click(getByRole('button', { name: 'Publish' }));
@@ -103,7 +103,7 @@ describe('Sidebar component', () => {
     mockSdk.user.spaceMembership = { admin: false, roles: [{ name: 'UK Editor' }] };
     mockSdk.parameters.installation = ukParameters;
     mockSdk.entry.getSys.mockReturnValue({ version: 7, createdBy: { sys: { id: 'uk-teammate' } } });
-    mockSdk.dialogs.openCurrentApp.mockResolvedValue(['en-US', 'en-GB']);
+    mockSdk.dialogs.openCurrentApp.mockResolvedValue({ locales: ['en-US', 'en-GB'], linkedIds: [] });
 
     const { getByRole, getByText } = render(<Sidebar />);
     fireEvent.click(getByRole('button', { name: 'Publish' }));
@@ -113,7 +113,7 @@ describe('Sidebar component', () => {
     expect(parameters.requiredLocales).toEqual(['en-US']);
     expect(parameters.allowedLocales).toEqual(['en-US', 'en-GB']);
     await waitFor(() => expect(getByText('Published en-US, en-GB.')).toBeTruthy());
-    // Only this entry is published - never anything it links to.
+    // It links to nothing, so only this entry is published.
     expect(mockSdk.cma.entry.publish).toHaveBeenCalledTimes(1);
     expect(mockSdk.cma.entry.publish).toHaveBeenCalledWith(
       { entryId: 'test-entry', locales: ['en-US', 'en-GB'] },
@@ -253,10 +253,89 @@ describe('Sidebar component', () => {
     expect(parameters.requiredLocales).toEqual(['en-US']);
   });
 
+  it('offers draft linked content in the dialog and publishes what stays ticked before the entry itself', async () => {
+    mockSdk.user.spaceMembership = { admin: false, roles: [{ name: 'UK Editor' }] };
+    mockSdk.parameters.installation = ukParameters;
+    mockSdk.contentType.fields = [{ id: 'slides', name: 'Slides', localized: true }];
+    mockSdk.entry.getSys.mockReturnValue({ version: 9, publishedVersion: 8, createdBy: { sys: { id: 'us-editor' } } });
+    mockSdk.cma.entry.get.mockResolvedValue({
+      sys: { id: 'test-entry', fieldStatus: { '*': {} } },
+      fields: { slides: { 'en-GB': [entryLink('changed-slide'), entryLink('new-slide')] } },
+    });
+    mockSdk.cma.entry.getMany.mockImplementation(async ({ query }: { query: Record<string, string> }) => {
+      if (!query['sys.id[in]']) return { items: [], total: 0 };
+      return {
+        items: [
+          {
+            sys: { id: 'changed-slide', version: 6, publishedVersion: 4, contentType: { sys: { id: 'slide' } } },
+            fields: { title: { 'en-US': 'Changed slide' } },
+          },
+          {
+            sys: { id: 'new-slide', version: 2, contentType: { sys: { id: 'slide' } }, createdBy: { sys: { id: 'uk-teammate' } } },
+            fields: { title: { 'en-US': 'New slide' } },
+          },
+        ],
+      };
+    });
+    mockSdk.cma.contentType.get.mockResolvedValue({ displayField: 'title', fields: [{ id: 'title', localized: true }] });
+    mockSdk.dialogs.openCurrentApp.mockResolvedValue({ locales: ['en-GB'], linkedIds: ['changed-slide', 'new-slide'] });
+
+    const { getByRole, findByText } = render(<Sidebar />);
+    fireEvent.click(getByRole('button', { name: 'Publish' }));
+
+    await findByText('Published en-GB. Also published 2 linked items.');
+    const { parameters } = mockSdk.dialogs.openCurrentApp.mock.calls[0][0];
+    expect(parameters.fieldNames).toEqual({ slides: 'Slides' });
+    expect(parameters.linkedItems.map((item: { id: string }) => item.id)).toEqual(['changed-slide', 'new-slide']);
+    // Linked content goes first; a never-published one created by the team takes the default locale too.
+    expect(mockSdk.cma.entry.publish.mock.calls).toEqual([
+      [{ entryId: 'new-slide', locales: ['en-US', 'en-GB'] }, { sys: { id: 'new-slide', type: 'Entry', version: 2 } }],
+      [{ entryId: 'changed-slide', locales: ['en-GB'] }, { sys: { id: 'changed-slide', type: 'Entry', version: 6 } }],
+      [{ entryId: 'test-entry', locales: ['en-GB'] }, { sys: { id: 'test-entry', type: 'Entry', version: 9 } }],
+    ]);
+    mockSdk.cma.entry.get.mockResolvedValue({ sys: { fieldStatus: { '*': {} } } });
+  });
+
+  it('reports a never-published linked entry another team created instead of failing the publish', async () => {
+    mockSdk.user.spaceMembership = { admin: false, roles: [{ name: 'UK Editor' }] };
+    mockSdk.parameters.installation = ukParameters;
+    mockSdk.contentType.fields = [{ id: 'slides', name: 'Slides', localized: true }];
+    mockSdk.entry.getSys.mockReturnValue({ version: 9, publishedVersion: 8, createdBy: { sys: { id: 'us-editor' } } });
+    mockSdk.cma.entry.get.mockResolvedValue({
+      sys: { id: 'test-entry', fieldStatus: { '*': {} } },
+      fields: { slides: { 'en-GB': [entryLink('us-slide')] } },
+    });
+    mockSdk.cma.entry.getMany.mockImplementation(async ({ query }: { query: Record<string, string> }) =>
+      query['sys.id[in]']
+        ? {
+            items: [
+              {
+                sys: { id: 'us-slide', version: 2, contentType: { sys: { id: 'slide' } }, createdBy: { sys: { id: 'us-editor' } } },
+                fields: { title: { 'en-US': 'US slide' } },
+              },
+            ],
+          }
+        : { items: [], total: 0 }
+    );
+    mockSdk.cma.contentType.get.mockResolvedValue({ displayField: 'title', fields: [{ id: 'title', localized: true }] });
+    mockSdk.dialogs.openCurrentApp.mockResolvedValue({ locales: ['en-GB'], linkedIds: ['us-slide'] });
+
+    const { getByRole, findByText } = render(<Sidebar />);
+    fireEvent.click(getByRole('button', { name: 'Publish' }));
+
+    await findByText(/US slide: has never been published and needs English \(United States\)/);
+    expect(mockSdk.cma.entry.publish).toHaveBeenCalledTimes(1);
+    expect(mockSdk.cma.entry.publish).toHaveBeenCalledWith(
+      { entryId: 'test-entry', locales: ['en-GB'] },
+      { sys: { id: 'test-entry', type: 'Entry', version: 9 } }
+    );
+    mockSdk.cma.entry.get.mockResolvedValue({ sys: { fieldStatus: { '*': {} } } });
+  });
+
   it('shows the real error message when the CMA call rejects with a JSON-message Error', async () => {
     mockSdk.user.spaceMembership = { admin: true, roles: [] };
     mockSdk.parameters.installation = { roleLocaleMap: {} };
-    mockSdk.dialogs.openCurrentApp.mockResolvedValue(['en-US']);
+    mockSdk.dialogs.openCurrentApp.mockResolvedValue({ locales: ['en-US'], linkedIds: [] });
     mockSdk.cma.entry.publish.mockRejectedValueOnce(new Error('{"message":"Validation failed"}'));
 
     const { getByText, getByRole } = render(<Sidebar />);
@@ -268,7 +347,7 @@ describe('Sidebar component', () => {
   it('shows the real error message when the CMA call rejects with a plain object, not an Error', async () => {
     mockSdk.user.spaceMembership = { admin: true, roles: [] };
     mockSdk.parameters.installation = { roleLocaleMap: {} };
-    mockSdk.dialogs.openCurrentApp.mockResolvedValue(['en-US']);
+    mockSdk.dialogs.openCurrentApp.mockResolvedValue({ locales: ['en-US'], linkedIds: [] });
     mockSdk.cma.entry.publish.mockRejectedValueOnce({ status: 422, message: 'Entry is invalid' });
 
     const { getByText, getByRole } = render(<Sidebar />);
@@ -280,7 +359,7 @@ describe('Sidebar component', () => {
   it('surfaces the specific field/locale reason from a Contentful validation error, not just the generic label', async () => {
     mockSdk.user.spaceMembership = { admin: true, roles: [] };
     mockSdk.parameters.installation = { roleLocaleMap: {} };
-    mockSdk.dialogs.openCurrentApp.mockResolvedValue(['en-US']);
+    mockSdk.dialogs.openCurrentApp.mockResolvedValue({ locales: ['en-US'], linkedIds: [] });
     mockSdk.cma.entry.publish.mockRejectedValueOnce(
       new Error(
         JSON.stringify({
@@ -303,7 +382,7 @@ describe('Sidebar component', () => {
   it('offers an expandable details view when Contentful reports more than one validation issue', async () => {
     mockSdk.user.spaceMembership = { admin: true, roles: [] };
     mockSdk.parameters.installation = { roleLocaleMap: {} };
-    mockSdk.dialogs.openCurrentApp.mockResolvedValue(['en-US']);
+    mockSdk.dialogs.openCurrentApp.mockResolvedValue({ locales: ['en-US'], linkedIds: [] });
     mockSdk.cma.entry.publish.mockRejectedValueOnce(
       new Error(
         JSON.stringify({

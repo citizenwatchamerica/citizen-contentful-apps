@@ -10,6 +10,13 @@ const mockCma: any = {
     get: vi.fn().mockResolvedValue({ sys: { fieldStatus: { '*': {} } } }),
     getMany: vi.fn().mockResolvedValue({ items: [], total: 0 }),
   },
+  asset: {
+    publish: vi.fn().mockResolvedValue(undefined),
+    getMany: vi.fn().mockResolvedValue({ items: [], total: 0 }),
+  },
+  contentType: {
+    get: vi.fn().mockResolvedValue({ fields: [], displayField: 'title' }),
+  },
   scheduledActions: {
     getMany: vi.fn().mockResolvedValue({ items: [] }),
     create: vi.fn().mockResolvedValue({ sys: { id: 'scheduled-1' } }),

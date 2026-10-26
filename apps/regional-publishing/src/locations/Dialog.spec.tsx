@@ -45,7 +45,7 @@ describe('Dialog component', () => {
     fireEvent.click(container.querySelector('#dialog-publish-en-GB')!);
     fireEvent.click(getByText('Publish selected regions (1)'));
 
-    expect(mockSdk.close).toHaveBeenCalledWith(['en-US']);
+    expect(mockSdk.close).toHaveBeenCalledWith({ locales: ['en-US'], linkedIds: [] });
   });
 
   it('locks required locales on and explains why', () => {
@@ -69,11 +69,11 @@ describe('Dialog component', () => {
     expect(getByText(/Your team owns this entry, so you can also publish/)).toBeTruthy();
 
     fireEvent.click(getByText('Publish selected regions (1)'));
-    expect(mockSdk.close).toHaveBeenLastCalledWith(['en-GB']);
+    expect(mockSdk.close).toHaveBeenLastCalledWith({ locales: ['en-GB'], linkedIds: [] });
 
     fireEvent.click(container.querySelector('#dialog-publish-en-US')!);
     fireEvent.click(getByText('Publish all my regions (2)'));
-    expect(mockSdk.close).toHaveBeenLastCalledWith(['en-GB', 'en-US']);
+    expect(mockSdk.close).toHaveBeenLastCalledWith({ locales: ['en-GB', 'en-US'], linkedIds: [] });
   });
 
   it('in unpublish mode, starts with nothing checked and uses unpublish wording', () => {
@@ -107,6 +107,50 @@ describe('Dialog component', () => {
     fireEvent.click(container.querySelector('#dialog-unpublish-en-GB')!);
     expect(queryByText(/is the default locale/)).toBeNull();
     expect(getByText('Unpublish all my regions (2)').closest('button')).toHaveProperty('disabled', false);
+  });
+
+  it('lists linked content by reference field, ticked, and lets the user untick some', () => {
+    mockSdk.parameters.invocation = {
+      ...mockSdk.parameters.invocation,
+      fieldNames: { slides: 'Slides', hero: 'Hero' },
+      linkedItems: [
+        { id: 'slide-1', type: 'Entry', title: 'Spring slide', status: 'draft', locales: ['en-GB'], fieldIds: ['slides'] },
+        { id: 'photo-1', type: 'Asset', title: 'Spring photo', status: 'draft', locales: ['en-GB'], fieldIds: ['slides'] },
+        { id: 'hero-1', type: 'Entry', title: 'Hero banner', status: 'changed', locales: ['en-US'], fieldIds: ['hero'] },
+      ],
+    };
+    const { getByText, container } = render(<Dialog />);
+
+    expect(getByText('Also publish linked content (3 of 3)')).toBeTruthy();
+    expect(getByText('Slides')).toBeTruthy();
+    expect(getByText('Hero')).toBeTruthy();
+    expect(getByText(/Spring photo/).textContent).toContain('(media)');
+    expect(container.querySelector('#dialog-linked-slide-1')).toHaveProperty('checked', true);
+
+    fireEvent.click(container.querySelector('#dialog-linked-photo-1')!);
+    fireEvent.click(getByText('Publish all my regions (2)'));
+    expect(mockSdk.close).toHaveBeenLastCalledWith({ locales: ['en-US', 'en-GB'], linkedIds: ['slide-1', 'hero-1'] });
+  });
+
+  it('hides linked content that only shows in unticked regions', () => {
+    mockSdk.parameters.invocation = {
+      ...mockSdk.parameters.invocation,
+      linkedItems: [
+        { id: 'slide-1', type: 'Entry', title: 'Spring slide', status: 'draft', locales: ['en-GB'], fieldIds: ['slides'] },
+      ],
+    };
+    const { getByText, queryByText, container } = render(<Dialog />);
+
+    fireEvent.click(container.querySelector('#dialog-publish-en-GB')!);
+    expect(queryByText('Spring slide')).toBeNull();
+    fireEvent.click(getByText('Publish selected regions (1)'));
+    expect(mockSdk.close).toHaveBeenLastCalledWith({ locales: ['en-US'], linkedIds: [] });
+  });
+
+  it('warns when the linked content list may be incomplete', () => {
+    mockSdk.parameters.invocation = { ...mockSdk.parameters.invocation, linkedIncomplete: true };
+    const { getByText } = render(<Dialog />);
+    expect(getByText(/Not everything this entry links to could be checked/)).toBeTruthy();
   });
 
   it('closes with null on cancel', () => {

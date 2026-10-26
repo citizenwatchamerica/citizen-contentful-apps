@@ -13,12 +13,13 @@ import {
 import { useAutoResizer, useSDK } from '@contentful/react-apps-toolkit';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { getEntryStatus } from '../utils/entryStatus';
+import { getLinkedContent, LinkedContent } from '../utils/linkedContent';
 import { getLocaleStatuses } from '../utils/localeStatus';
-import { isSharedOutsideTeam } from '../utils/ownership';
+import { isSharedOutsideTeam, LinkType } from '../utils/ownership';
 import { AppInstallationParameters, getAllowedLocales, getOwningRoles } from '../utils/permissions';
-import { publishLocales } from '../utils/publishLocales';
+import { publishAssetLocales, publishLocales } from '../utils/publishLocales';
 import { unpublishEntry, unpublishLocales } from '../utils/unpublishLocales';
-import type { DialogMode } from './Dialog';
+import type { DialogMode, PublishSelection } from './Dialog';
 import {
   cancelScheduledAction,
   createScheduledAction,
@@ -110,7 +111,10 @@ const Sidebar = () => {
   useAutoResizer();
 
   const [pendingAction, setPendingAction] = useState<DialogMode | null>(null);
-  const [result, setResult] = useState<{ action: DialogMode; locales: string[] } | null>(null);
+  const [result, setResult] = useState<{ action: DialogMode; locales: string[]; linkedCount: number } | null>(
+    null
+  );
+  const [linkedProblems, setLinkedProblems] = useState<string[]>([]);
   const [actionError, setActionError] = useState<{ action: DialogMode; error: ExtractedError } | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [entryStatus, setEntryStatus] = useState(() => getEntryStatus(sdk.entry.getSys()));
@@ -198,24 +202,25 @@ const Sidebar = () => {
     const isSharedContentType = !sdk.contentType.fields.some(field => field.localized);
     const canPublishDefault = allowedLocales.includes(defaultLocale);
 
-    let teamOwnsEntry = false;
-    if (action === 'publish' && !isSharedContentType && !canPublishDefault) {
-      const owningRoles = getOwningRoles(
-        sdk.user.spaceMembership,
-        parameters,
-        createdBy?.sys.id,
-        sdk.user.sys.id
-      );
+    const teamOwns = async (creatorId: string | undefined, entityId: string, linkType: LinkType) => {
+      const owningRoles = getOwningRoles(sdk.user.spaceMembership, parameters, creatorId, sdk.user.sys.id);
       const teamLocales = owningRoles.flatMap(roleName => parameters?.roleLocaleMap?.[roleName] ?? []);
       const isTeamMember = (userId: string | undefined) =>
         !!userId &&
         (userId === sdk.user.sys.id ||
           owningRoles.some(roleName => (parameters?.roleMembers?.[roleName] ?? []).includes(userId)));
 
-      teamOwnsEntry =
+      return (
         owningRoles.length > 0 &&
-        !(await isSharedOutsideTeam(sdk.cma, sdk.ids.entry, teamLocales, isTeamMember));
-    }
+        !(await isSharedOutsideTeam(sdk.cma, entityId, teamLocales, isTeamMember, linkType))
+      );
+    };
+
+    const teamOwnsEntry =
+      action === 'publish' &&
+      !isSharedContentType &&
+      !canPublishDefault &&
+      (await teamOwns(createdBy?.sys.id, sdk.ids.entry, 'Entry'));
 
     const requiredLocales =
       action === 'publish' &&
@@ -256,9 +261,23 @@ const Sidebar = () => {
       return;
     }
 
+    // Draft/changed entries and media this entry links to, so they can go live with it instead of
+    // leaving the published entry pointing at drafts.
+    let linkedContent: LinkedContent = { items: [], incomplete: false };
+    if (action === 'publish') {
+      setPendingAction('publish');
+      linkedContent = await getLinkedContent(
+        sdk.cma,
+        sdk.ids.entry,
+        sdk.contentType.fields.filter(field => field.localized).map(field => field.id),
+        { locales: dialogLocales, defaultLocale, fallbacks: sdk.locales.fallbacks ?? {} }
+      );
+      setPendingAction(null);
+    }
+
     // Mirrors the native Publish button's review step: the user sees exactly which of
     // their regions are about to change and can narrow the selection before confirming.
-    const selectedLocales = await sdk.dialogs.openCurrentApp({
+    const selection: PublishSelection | string[] | null = await sdk.dialogs.openCurrentApp({
       title: actionCopy[action].title,
       width: 'small',
       minHeight: 450,
@@ -271,6 +290,11 @@ const Sidebar = () => {
         }),
         ...(requiredLocales.length > 0 && { requiredLocales }),
         ...(optionalLocales.length > 0 && { optionalLocales }),
+        ...(linkedContent.items.length > 0 && {
+          linkedItems: linkedContent.items,
+          fieldNames: Object.fromEntries(sdk.contentType.fields.map(field => [field.id, field.name])),
+        }),
+        ...(linkedContent.incomplete && { linkedIncomplete: true }),
         allowedLocales: dialogLocales,
         excludedLocales: spaceLocales.filter(locale => !dialogLocales.includes(locale)),
         localeStatus,
@@ -278,26 +302,68 @@ const Sidebar = () => {
       },
     });
 
+    const selectedLocales = Array.isArray(selection) ? selection : selection?.locales;
     if (!selectedLocales || selectedLocales.length === 0) {
       return;
     }
+    const selectedLinkedIds = Array.isArray(selection) ? [] : selection?.linkedIds ?? [];
 
     setPendingAction(action);
     setResult(null);
     setActionError(null);
+    setLinkedProblems([]);
     try {
       const { version } = sdk.entry.getSys();
       const takesDownEverything =
         liveLocales.length > 0 && liveLocales.every(locale => selectedLocales.includes(locale));
 
+      let linkedCount = 0;
       if (action === 'publish') {
+        // Deepest first, so nothing goes live pointing at a draft. A linked item that fails is
+        // reported but doesn't stop the rest - Contentful lets an entry link to unpublished content.
+        const problems: string[] = [];
+        const linkedToPublish = linkedContent.items
+          .filter(item => selectedLinkedIds.includes(item.id))
+          .reverse();
+
+        for (const item of linkedToPublish) {
+          // Same default-locale rule as the entry itself: needed on a first publish and for content
+          // types with no localized fields.
+          let locales = selectedLocales;
+          if ((item.isFirstPublish || item.isSharedContentType) && !locales.includes(defaultLocale)) {
+            const mayAddDefault =
+              item.isSharedContentType || canPublishDefault || (await teamOwns(item.createdBy ?? undefined, item.id, item.type));
+            if (!mayAddDefault) {
+              problems.push(
+                `${item.title}: has never been published and needs ${
+                  localeNames[defaultLocale] ?? defaultLocale
+                }, which only its owning team or an admin can publish.`
+              );
+              continue;
+            }
+            locales = [defaultLocale, ...locales];
+          }
+
+          try {
+            if (item.type === 'Asset') {
+              await publishAssetLocales(sdk.cma, item.id, item.version, locales);
+            } else {
+              await publishLocales(sdk.cma, item.id, item.version, locales);
+            }
+            linkedCount++;
+          } catch (err) {
+            problems.push(`${item.title}: ${extractErrorMessage(err).message}`);
+          }
+        }
+        setLinkedProblems(problems);
+
         await publishLocales(sdk.cma, sdk.ids.entry, version, selectedLocales);
       } else if (takesDownEverything) {
         await unpublishEntry(sdk.cma, sdk.ids.entry);
       } else {
         await unpublishLocales(sdk.cma, sdk.ids.entry, version, selectedLocales);
       }
-      setResult({ action, locales: selectedLocales });
+      setResult({ action, locales: selectedLocales, linkedCount });
     } catch (err) {
       setActionError({ action, error: extractErrorMessage(err) });
     } finally {
@@ -345,6 +411,20 @@ const Sidebar = () => {
       {result && (
         <Note variant="positive">
           {actionCopy[result.action].done} {result.locales.join(', ')}.
+          {result.linkedCount > 0 &&
+            ` Also published ${result.linkedCount} linked item${result.linkedCount === 1 ? '' : 's'}.`}
+        </Note>
+      )}
+      {linkedProblems.length > 0 && (
+        <Note variant="warning">
+          Some linked content wasn&apos;t published:
+          <ul>
+            {linkedProblems.map(problem => (
+              <li key={problem}>
+                <Text fontSize="fontSizeS">{problem}</Text>
+              </li>
+            ))}
+          </ul>
         </Note>
       )}
       {actionError && <ErrorNote prefix={actionCopy[actionError.action].failed} error={actionError.error} />}

@@ -73,6 +73,17 @@ describe('isSharedOutsideTeam', () => {
     expect(await isSharedOutsideTeam(cma, 'slide', ['en-GB'], isUkMember)).toBe(true);
   });
 
+  it('checks an asset by the entries that link to it', async () => {
+    const assetLink = { sys: { type: 'Link', linkType: 'Asset', id: 'photo' } };
+    const getMany = vi.fn(async ({ query }: { query: Record<string, string> }) =>
+      query.links_to_asset === 'photo'
+        ? { items: [parentEntry('slide', 'us-admin', { image: { 'en-US': assetLink } })], total: 1 }
+        : { items: [], total: 0 }
+    );
+    const cma: any = { entry: { getMany } };
+    expect(await isSharedOutsideTeam(cma, 'photo', ['en-GB'], isUkMember, 'Asset')).toBe(true);
+  });
+
   it('treats a failed lookup as shared', async () => {
     const cma: any = { entry: { getMany: vi.fn().mockRejectedValue(new Error('Forbidden')) } };
     expect(await isSharedOutsideTeam(cma, 'slide', ['en-GB'], isUkMember)).toBe(true);
