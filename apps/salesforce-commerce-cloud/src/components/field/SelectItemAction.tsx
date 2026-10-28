@@ -101,6 +101,7 @@ const SelectItemAction = (props: SelectItemActionProps) => {
       fieldValue: props.fieldValue,
       siteIds: props.siteIds,
       siteMap: fieldType === 'category' ? readSiteMap(sdk) : undefined,
+      locale: sdk.field.locale,
     };
 
     if (!queryArray.length || queriesComplete) {
