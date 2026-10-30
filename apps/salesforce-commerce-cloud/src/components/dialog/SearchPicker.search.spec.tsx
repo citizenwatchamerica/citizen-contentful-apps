@@ -1,5 +1,5 @@
 import React from 'react';
-import { act, fireEvent, render } from '@testing-library/react';
+import { act, fireEvent, render, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const searchProducts = vi.fn();
@@ -15,13 +15,13 @@ vi.mock('@contentful/react-apps-toolkit', () => ({
 
 const sdk = {
   parameters: {
-    installation: {},
+    installation: { localeSites: 'en-US=siteA' },
     invocation: {
       selectMultiple: true,
       fieldType: 'product',
       fieldValue: [],
       currentData: [],
-      siteIds: ['siteA'],
+      locale: 'en-US',
       siteMap: {},
     },
   },
@@ -30,6 +30,7 @@ const sdk = {
 };
 
 import SearchPicker from './SearchPicker';
+import SfccClient from '../../utils/Sfcc';
 
 const hit = (id: string) => ({ id, name: { default: id } });
 
@@ -48,6 +49,8 @@ describe('SearchPicker search requests', () => {
     vi.useFakeTimers();
     searchProducts.mockReset();
     notifierError.mockReset();
+    vi.mocked(SfccClient).mockClear();
+    sdk.parameters.invocation.locale = 'en-US';
   });
 
   afterEach(() => {
@@ -89,5 +92,30 @@ describe('SearchPicker search requests', () => {
     });
 
     expect(notifierError).toHaveBeenCalledTimes(1);
+  });
+
+  it('searches only the site mapped to the field locale, with no site selector', async () => {
+    searchProducts.mockResolvedValue([]);
+
+    const { container } = render(<SearchPicker />);
+    await act(async () => {
+      vi.advanceTimersByTime(500);
+    });
+
+    expect(vi.mocked(SfccClient)).toHaveBeenCalledWith(sdk.parameters.installation, 'siteA');
+    expect(within(container).queryByRole('combobox')).toBeNull();
+    expect(within(container).getByText('siteA')).toBeTruthy();
+  });
+
+  it('shows a note and does not search on a locale with no mapped site', async () => {
+    sdk.parameters.invocation.locale = 'en-AU';
+
+    const { getByText } = render(<SearchPicker />);
+    await act(async () => {
+      vi.advanceTimersByTime(500);
+    });
+
+    expect(getByText(/No SFCC site is configured for en-AU/)).toBeTruthy();
+    expect(searchProducts).not.toHaveBeenCalled();
   });
 });

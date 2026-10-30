@@ -19,6 +19,8 @@ import {
   stickyHeaderBreakpoint,
 } from './SearchPicker';
 
+const imageHeight = 290;
+
 const ProductSearchResults = (props: SearchResultsProps) => {
   const resultsStyles = css`
     max-height: ${height}px;
@@ -101,7 +103,22 @@ const ProductSearchResult = (props: SearchResultProps) => {
 
   const skeletonImageStyles = css`
     width: 100%;
-    height: 290px;
+    height: ${imageHeight}px;
+  `;
+
+  // A fixed frame so oversized source images neither stretch the card nor get
+  // cropped, and cards in a row line up.
+  const imageFrameStyles = css`
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: ${imageHeight}px;
+  `;
+
+  const imageStyles = css`
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
   `;
 
   const resultNameStyles = css`
@@ -143,17 +160,18 @@ const ProductSearchResult = (props: SearchResultProps) => {
         css={productStylesCss}>
         {!imageHasLoaded && !imageHasErrored && (
           <SkeletonContainer css={skeletonImageStyles}>
-            <SkeletonImage width={400} height={290} />
+            <SkeletonImage width={400} height={imageHeight} />
           </SkeletonContainer>
         )}
         {imageHasErrored && (
-          <div>
+          <div css={imageFrameStyles}>
             <AssetIcon />
           </div>
         )}
         {!imageHasErrored && (
-          <div>
+          <div css={imageHasLoaded ? imageFrameStyles : undefined}>
             <img
+              css={imageStyles}
               onLoad={() => setImageHasLoaded(true)}
               onError={() => setImageHasErrored(true)}
               style={{ display: imageHasLoaded ? 'block' : 'none' }}

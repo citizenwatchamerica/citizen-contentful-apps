@@ -11,10 +11,10 @@ export interface DialogInvocationParameters extends KeyValueMap {
   fieldType: 'product' | 'category';
   fieldValue?: string | string[];
   currentData?: any | any[];
-  siteIds: string[];
   siteMap?: SiteMap;
-  // The calling field's locale, used to pick a name when SFCC has no default one.
-  locale?: string;
+  // The calling field's locale. It decides which site the picker searches, and
+  // supplies a name when SFCC has no default one.
+  locale: string;
 }
 
 const Dialog = () => {

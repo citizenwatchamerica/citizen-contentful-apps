@@ -6,13 +6,13 @@ import { AppInstanceParameters } from '../../locations/Field';
 import ItemCard from './ItemCard';
 import { SiteMap, readSiteMap, writeSiteMap, removeFromSiteMap } from '../../utils/siteMap';
 import { parseCategoryId } from '../../utils/Sfcc';
-import { StockBySite } from './useStockBySite';
+import { SiteStock } from './useSiteStock';
 
 interface SingleItemProps {
   value: string;
-  siteId: string;
+  siteId?: string;
   siteMap?: SiteMap;
-  stockBySite?: StockBySite;
+  siteStock?: SiteStock;
 }
 
 const SingleItem = (props: SingleItemProps) => {
@@ -33,7 +33,7 @@ const SingleItem = (props: SingleItemProps) => {
       type={fieldType}
       siteId={props.siteId}
       siteMap={props.siteMap}
-      stockBySite={props.stockBySite}
+      siteStock={props.siteStock}
       onRemove={onRemoveItem}
     />
   );

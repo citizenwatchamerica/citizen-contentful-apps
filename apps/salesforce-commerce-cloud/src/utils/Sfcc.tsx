@@ -1,5 +1,6 @@
 import axios, { AxiosInstance, InternalAxiosRequestConfig } from 'axios';
-import { AppInstallationParameters, parseSiteIds } from '../locations/ConfigScreen';
+import { AppInstallationParameters } from '../locations/ConfigScreen';
+import { configuredSiteIds } from './localeSites';
 
 // Handles legacy composite keys ("catalogId:categoryId") by extracting just the category ID.
 // New format stores only the category ID, so this is a no-op for new values.
@@ -28,9 +29,10 @@ interface TokenProps {
 class SfccClient {
   protected client!: AxiosInstance;
   protected parameters: AppInstallationParameters;
-  protected siteId: string;
+  // Absent on a locale with no mapped site: lookups then run without a site context.
+  protected siteId?: string;
 
-  constructor(parameters: AppInstallationParameters, siteId: string) {
+  constructor(parameters: AppInstallationParameters, siteId?: string) {
     this.parameters = parameters;
     this.siteId = siteId;
 
@@ -229,30 +231,18 @@ class SfccClient {
   };
 
   public fetchSiteCatalogId = async (): Promise<string | null> =>
-    this.fetchCatalogIdForSite(this.siteId);
+    this.siteId ? this.fetchCatalogIdForSite(this.siteId) : null;
 
   // Every catalog serving any configured site. A saved category may have been
   // selected under any of them, so looking one up cannot assume a single site.
   public fetchConfiguredCatalogIds = async (): Promise<string[]> => {
     const catalogs = await this.fetchCatalogs();
-    const siteIds = parseSiteIds(this.parameters.siteIds);
+    const siteIds = configuredSiteIds(this.parameters.localeSites);
 
     return catalogs
       .filter((cat: any) => cat.assignedSites?.some((site: any) => siteIds.includes(site.id)))
       .map((cat: any) => cat.id)
       .filter(Boolean);
-  };
-
-  // The configured sites a catalog serves: one where a site has its own catalog,
-  // several where sites still share one.
-  public fetchSitesForCatalog = async (catalogId: string): Promise<string[]> => {
-    const catalogs = await this.fetchCatalogs();
-    const siteIds = parseSiteIds(this.parameters.siteIds);
-    const catalog = catalogs.find((cat: any) => cat.id === catalogId);
-
-    return (catalog?.assignedSites || [])
-      .map((site: any) => site.id)
-      .filter((id: string) => siteIds.includes(id));
   };
 
   private buildCategoryQuery = (catalogIds: string[], query?: string) => {
@@ -328,7 +318,7 @@ class SfccClient {
   // Category IDs are only unique within a catalog, so the same ID can sit in
   // several of them. When the site a category was selected under is known, look
   // it up in that site's catalog first — searching every catalog would return an
-  // arbitrary copy, whose catalog then reports the wrong sites. Falls back to a
+  // arbitrary copy, possibly another site's. Falls back to a
   // catalog-wide search so a category that has since moved is still found.
   public fetchCategoryById = async (categoryId: string, preferredSiteId?: string) => {
     if (preferredSiteId) {
