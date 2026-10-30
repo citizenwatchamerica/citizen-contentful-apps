@@ -25,8 +25,11 @@ export interface PublishSelection {
 
 interface DialogInvocationParams {
   mode?: DialogMode;
-  // Unpublish only: the space default locale and every locale currently live (all teams').
+  // The space default locale. Unpublish always gets it; publish gets it with `sharedFieldChanges`.
   defaultLocale?: string;
+  // Publish only: this entry's non-localized fields with unpublished changes, which only go live
+  // with the default locale.
+  sharedFieldChanges?: string[];
   liveLocales?: string[];
   // Publish only: locales that must go out with this publish and can't be unticked.
   requiredLocales?: string[];
@@ -66,6 +69,7 @@ const Dialog = () => {
     liveLocales = [],
     requiredLocales = [],
     optionalLocales = [],
+    sharedFieldChanges = [],
     linkedItems = [],
     linkedIncomplete = false,
     fieldNames = {},
@@ -76,11 +80,18 @@ const Dialog = () => {
   } = sdk.parameters.invocation as unknown as DialogInvocationParams;
   const text = copy[mode];
 
-  // Publishing starts with every region ticked except optional ones; unpublishing takes content
-  // down, so the user has to opt each region in.
+  // Publishing starts with every region ticked except optional ones - unless the entry has shared-
+  // field changes, which need the default locale; unpublishing takes content down, so the user has
+  // to opt each region in.
   const [selectedLocales, setSelectedLocales] = useState<string[]>(
-    mode === 'publish' ? allowedLocales.filter(locale => !optionalLocales.includes(locale)) : []
+    mode === 'publish'
+      ? allowedLocales.filter(
+          locale =>
+            !optionalLocales.includes(locale) || (sharedFieldChanges.length > 0 && locale === defaultLocale)
+        )
+      : []
   );
+  const defaultLocaleName = defaultLocale ? localeNames[defaultLocale] ?? defaultLocale : '';
 
   const toggleLocale = (locale: string, checked: boolean) => {
     setSelectedLocales(prev => (checked ? [...prev, locale] : prev.filter(l => l !== locale)));
@@ -156,16 +167,24 @@ const Dialog = () => {
             <Flex key={fieldId} flexDirection="column" gap="spacingXs">
               <Text fontWeight="fontWeightDemiBold">{fieldNames[fieldId] ?? fieldId}</Text>
               {items.map(item => (
-                <Flex key={item.id} alignItems="center" gap="spacingXs">
-                  <Checkbox
-                    id={`dialog-linked-${item.id}`}
-                    isChecked={!uncheckedLinkedIds.includes(item.id)}
-                    onChange={e => toggleLinked(item.id, (e.target as HTMLInputElement).checked)}
-                  >
-                    {item.title}
-                    {item.type === 'Asset' && ' (media)'}
-                  </Checkbox>
-                  <EntityStatusBadge entityStatus={item.status} />
+                <Flex key={item.id} flexDirection="column">
+                  <Flex alignItems="center" gap="spacingXs">
+                    <Checkbox
+                      id={`dialog-linked-${item.id}`}
+                      isChecked={!uncheckedLinkedIds.includes(item.id)}
+                      onChange={e => toggleLinked(item.id, (e.target as HTMLInputElement).checked)}
+                    >
+                      {item.title}
+                      {item.type === 'Asset' && ' (media)'}
+                    </Checkbox>
+                    <EntityStatusBadge entityStatus={item.status} />
+                  </Flex>
+                  {item.sharedFieldChanges.length > 0 && (
+                    <Text fontSize="fontSizeS" fontColor="gray600">
+                      Shared fields changed: {item.sharedFieldChanges.join(', ')}. These go live with{' '}
+                      {defaultLocaleName}.
+                    </Text>
+                  )}
                 </Flex>
               ))}
             </Flex>
@@ -177,6 +196,20 @@ const Dialog = () => {
         <Note variant="warning">
           Not everything this entry links to could be checked, so some linked content may not be
           listed. Anything missing here stays as it is.
+        </Note>
+      )}
+
+      {mode === 'publish' && sharedFieldChanges.length > 0 && (
+        <Note variant={defaultLocale && allowedLocales.includes(defaultLocale) ? 'neutral' : 'warning'}>
+          {sharedFieldChanges.join(', ')} {sharedFieldChanges.length === 1 ? 'has' : 'have'} unpublished
+          changes. {sharedFieldChanges.length === 1 ? 'It is' : 'They are'} shared by every region, so{' '}
+          {defaultLocale && allowedLocales.includes(defaultLocale)
+            ? `${sharedFieldChanges.length === 1 ? 'it' : 'they'} only go${
+                sharedFieldChanges.length === 1 ? 'es' : ''
+              } live with ${defaultLocaleName}, which is ticked.`
+            : `only the owning team or an admin can publish ${
+                sharedFieldChanges.length === 1 ? 'it' : 'them'
+              } with ${defaultLocaleName}.`}
         </Note>
       )}
 
