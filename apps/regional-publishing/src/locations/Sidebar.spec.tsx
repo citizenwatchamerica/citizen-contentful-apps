@@ -332,6 +332,50 @@ describe('Sidebar component', () => {
     mockSdk.cma.entry.get.mockResolvedValue({ sys: { fieldStatus: { '*': {} } } });
   });
 
+  it('adds the default locale to a linked entry whose only unpublished changes are shared fields', async () => {
+    mockSdk.user.spaceMembership = { admin: false, roles: [{ name: 'UK Editor' }] };
+    mockSdk.parameters.installation = ukParameters;
+    mockSdk.contentType.fields = [{ id: 'components', name: 'Components', localized: true }];
+    mockSdk.entry.getSys.mockReturnValue({ version: 20, publishedVersion: 19, createdBy: { sys: { id: 'current-user' } } });
+    mockSdk.cma.entry.get.mockResolvedValue({
+      sys: { id: 'test-entry', fieldStatus: { '*': {} } },
+      fields: { components: { 'en-GB': [entryLink('banner')] } },
+    });
+    const banner = (size: string) => ({
+      sys: {
+        id: 'banner',
+        version: 29,
+        publishedVersion: 28,
+        contentType: { sys: { id: 'imageBanner' } },
+        createdBy: { sys: { id: 'current-user' } },
+        fieldStatus: { '*': { 'en-GB': 'published', 'en-US': 'changed' } },
+      },
+      fields: { size: { 'en-US': size } },
+    });
+    mockSdk.cma.entry.getMany.mockImplementation(async ({ query }: { query: Record<string, string> }) =>
+      query['sys.id[in]'] ? { items: [banner('full')] } : { items: [], total: 0 }
+    );
+    mockSdk.cma.entry.getPublished.mockResolvedValue({ items: [banner('medium')] });
+    mockSdk.cma.contentType.get.mockResolvedValue({
+      displayField: 'size',
+      fields: [{ id: 'size', name: 'Size', localized: false }, { id: 'image', name: 'Image', localized: true }],
+    });
+    mockSdk.dialogs.openCurrentApp.mockResolvedValue({ locales: ['en-GB'], linkedIds: ['banner'] });
+
+    const { getByRole, findByText } = render(<Sidebar />);
+    fireEvent.click(getByRole('button', { name: 'Publish' }));
+
+    await findByText('Published en-GB. Also published 1 linked item.');
+    const { parameters } = mockSdk.dialogs.openCurrentApp.mock.calls[0][0];
+    expect(parameters.linkedItems[0].sharedFieldChanges).toEqual(['Size']);
+    expect(mockSdk.cma.entry.publish.mock.calls[0]).toEqual([
+      { entryId: 'banner', locales: ['en-US', 'en-GB'] },
+      { sys: { id: 'banner', type: 'Entry', version: 29 } },
+    ]);
+    mockSdk.cma.entry.get.mockResolvedValue({ sys: { fieldStatus: { '*': {} } } });
+    mockSdk.cma.entry.getPublished.mockResolvedValue({ items: [] });
+  });
+
   it('shows the real error message when the CMA call rejects with a JSON-message Error', async () => {
     mockSdk.user.spaceMembership = { admin: true, roles: [] };
     mockSdk.parameters.installation = { roleLocaleMap: {} };

@@ -23,11 +23,17 @@ export type LinkedItem = {
   // An entry whose content type has no localized fields keeps everything under the default
   // locale, so it only goes live when the default locale is published with it.
   isSharedContentType: boolean;
+  // Names of non-localized fields with unpublished changes. Those values live under the default
+  // locale, so they only go live when the default locale is published - publishing a region alone
+  // leaves them as they are.
+  sharedFieldChanges: string[];
   createdBy: string | null;
 };
 
 export interface LinkedContent {
   items: LinkedItem[];
+  // The same, for the entry being published.
+  rootSharedFieldChanges: string[];
   // True when the walk hit a limit or a failed lookup, so some linked content may be missing.
   incomplete: boolean;
 }
@@ -55,6 +61,7 @@ interface Entity {
 
 interface ContentTypeInfo {
   localizedFields: Set<string>;
+  fieldNames: Record<string, string>;
   displayField?: string;
 }
 
@@ -112,6 +119,13 @@ const needsPublishIn = (sys: EntitySys, locales: string[]): boolean => {
   return locales.some(locale => fieldStatus[locale] !== 'published');
 };
 
+// Whether the default locale might hold unpublished changes - the only place shared fields can.
+const defaultLocaleChanged = (sys: EntitySys, defaultLocale: string): boolean => {
+  if (!sys.publishedVersion) return false;
+  const fieldStatus = sys.fieldStatus?.['*'];
+  return fieldStatus ? fieldStatus[defaultLocale] !== 'published' : statusOf(sys) !== 'published';
+};
+
 const firstText = (field: Record<string, unknown> | undefined, defaultLocale: string): string | undefined => {
   if (!field) return undefined;
   const value = field[defaultLocale] ?? Object.values(field).find(candidate => typeof candidate === 'string');
@@ -146,6 +160,7 @@ export const getLinkedContent = async (
         contentTypeId,
         cma.contentType.get({ contentTypeId }).then(contentType => ({
           localizedFields: new Set(contentType.fields.filter(field => field.localized).map(field => field.id)),
+          fieldNames: Object.fromEntries(contentType.fields.map(field => [field.id, field.name])),
           displayField: contentType.displayField,
         }))
       );
@@ -196,8 +211,9 @@ export const getLinkedContent = async (
     return grown;
   };
 
+  let root: Entity | undefined;
   try {
-    const root = (await cma.entry.get({ entryId })) as unknown as Entity;
+    root = (await cma.entry.get({ entryId })) as unknown as Entity;
     let frontier = followLinks(root, new Set(rootLocalizedFields), options.locales, null);
 
     for (let depth = 0; frontier.size > 0; depth++) {
@@ -234,6 +250,51 @@ export const getLinkedContent = async (
     incomplete = true;
   }
 
+  // Shared-field changes are found by diffing each candidate's draft against its published copy,
+  // field by field, under the default locale.
+  const sharedFieldChanges = new Map<string, string[]>();
+  const candidates: Array<{ entity: Entity; contentType: ContentTypeInfo }> = [];
+  for (const entity of [root, ...[...reach.keys()].map(id => entities.get(id))]) {
+    const contentTypeId = entity?.sys.contentType?.sys.id;
+    if (!entity || !contentTypeId || !defaultLocaleChanged(entity.sys, options.defaultLocale)) continue;
+    const contentType = await getContentType(contentTypeId).catch(() => undefined);
+    if (!contentType) continue;
+    const hasSharedFields = Object.keys(contentType.fieldNames).some(fieldId => !contentType.localizedFields.has(fieldId));
+    if (hasSharedFields) candidates.push({ entity, contentType });
+  }
+
+  if (candidates.length > 0) {
+    let published: Map<string, Entity> | undefined;
+    try {
+      const publishedEntities = await fetchInBatches(
+        candidates.map(({ entity }) => entity.sys.id),
+        batch =>
+          cma.entry.getPublished({ query: { 'sys.id[in]': batch.join(','), locale: '*', limit: batch.length } })
+      );
+      published = new Map(publishedEntities.map(entity => [entity.sys.id, entity]));
+    } catch {
+      // Without the published copies there's no telling which shared fields changed.
+      incomplete = true;
+    }
+
+    for (const { entity, contentType } of candidates) {
+      const publishedEntity = published?.get(entity.sys.id);
+      if (!publishedEntity) continue;
+      const changed = Object.keys(contentType.fieldNames).filter(
+        fieldId =>
+          !contentType.localizedFields.has(fieldId) &&
+          JSON.stringify(entity.fields[fieldId]?.[options.defaultLocale]) !==
+            JSON.stringify(publishedEntity.fields?.[fieldId]?.[options.defaultLocale])
+      );
+      if (changed.length > 0) {
+        sharedFieldChanges.set(
+          entity.sys.id,
+          changed.map(fieldId => contentType.fieldNames[fieldId])
+        );
+      }
+    }
+  }
+
   const items: LinkedItem[] = [];
   for (const [id, linked] of reach) {
     const entity = entities.get(id);
@@ -241,7 +302,8 @@ export const getLinkedContent = async (
     if (!entity || entity.sys.archivedVersion) continue;
 
     const locales = options.locales.filter(locale => linked.locales.has(locale));
-    if (!needsPublishIn(entity.sys, locales)) continue;
+    const changedSharedFields = sharedFieldChanges.get(id) ?? [];
+    if (!needsPublishIn(entity.sys, locales) && changedSharedFields.length === 0) continue;
 
     let title: string | undefined;
     let isSharedContentType = false;
@@ -261,15 +323,16 @@ export const getLinkedContent = async (
       id,
       type: linked.type,
       title: title ?? (linked.type === 'Asset' ? 'Untitled asset' : 'Untitled entry'),
-      status: statusOf(entity.sys),
+      status: changedSharedFields.length > 0 ? 'changed' : statusOf(entity.sys),
       locales,
       fieldIds: [...linked.fieldIds],
       version: entity.sys.version,
       isFirstPublish: !entity.sys.publishedVersion,
       isSharedContentType,
+      sharedFieldChanges: changedSharedFields,
       createdBy: entity.sys.createdBy?.sys.id ?? null,
     });
   }
 
-  return { items, incomplete };
+  return { items, rootSharedFieldChanges: sharedFieldChanges.get(entryId) ?? [], incomplete };
 };

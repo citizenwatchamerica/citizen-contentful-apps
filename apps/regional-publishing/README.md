@@ -33,7 +33,13 @@ never accidentally ship another team's in-progress edits in a different locale.
   team. Ticked items are published first, deepest first, in the same locales as the entry. A
   never-published item gets the default locale under the same ownership rule as the entry itself.
   An item that can't be published is listed after the publish and doesn't stop the entry going
-  out. The walk stops at 100 items or 6 levels deep, and the dialog says when the list may be
+  out.
+- **Shared-field changes**: non-localized fields (slug, size, focal point...) live under the
+  default locale, so publishing a region alone never sends them. The app diffs each entry's draft
+  against its published copy. When shared fields changed, a linked item is offered even if it's
+  up to date in the region, with the field names shown, and is published with the default locale
+  added. On the entry itself, the optional default locale starts ticked, with a note naming the
+  fields. The same ownership rule applies; anything the user can't publish is reported instead. The walk stops at 100 items or 6 levels deep, and the dialog says when the list may be
   incomplete.
 - **Shared content types**: a content type with no localized fields keeps everything under the
   default locale, so any regional editor publishes it with the default locale on every publish,

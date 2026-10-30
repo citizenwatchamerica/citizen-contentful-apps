@@ -263,7 +263,7 @@ const Sidebar = () => {
 
     // Draft/changed entries and media this entry links to, so they can go live with it instead of
     // leaving the published entry pointing at drafts.
-    let linkedContent: LinkedContent = { items: [], incomplete: false };
+    let linkedContent: LinkedContent = { items: [], rootSharedFieldChanges: [], incomplete: false };
     if (action === 'publish') {
       setPendingAction('publish');
       linkedContent = await getLinkedContent(
@@ -295,6 +295,10 @@ const Sidebar = () => {
           fieldNames: Object.fromEntries(sdk.contentType.fields.map(field => [field.id, field.name])),
         }),
         ...(linkedContent.incomplete && { linkedIncomplete: true }),
+        ...(linkedContent.rootSharedFieldChanges.length > 0 && {
+          sharedFieldChanges: linkedContent.rootSharedFieldChanges,
+          defaultLocale,
+        }),
         allowedLocales: dialogLocales,
         excludedLocales: spaceLocales.filter(locale => !dialogLocales.includes(locale)),
         localeStatus,
@@ -328,14 +332,19 @@ const Sidebar = () => {
 
         for (const item of linkedToPublish) {
           // Same default-locale rule as the entry itself: needed on a first publish and for content
-          // types with no localized fields.
+          // types with no localized fields - and for changed shared fields, which live under it.
           let locales = selectedLocales;
-          if ((item.isFirstPublish || item.isSharedContentType) && !locales.includes(defaultLocale)) {
+          const needsDefault =
+            item.isFirstPublish || item.isSharedContentType || item.sharedFieldChanges.length > 0;
+          if (needsDefault && !locales.includes(defaultLocale)) {
             const mayAddDefault =
               item.isSharedContentType || canPublishDefault || (await teamOwns(item.createdBy ?? undefined, item.id, item.type));
             if (!mayAddDefault) {
+              const reason = item.isFirstPublish
+                ? 'has never been published and needs'
+                : `has changes to shared fields (${item.sharedFieldChanges.join(', ')}) that only go live with`;
               problems.push(
-                `${item.title}: has never been published and needs ${
+                `${item.title}: ${reason} ${
                   localeNames[defaultLocale] ?? defaultLocale
                 }, which only its owning team or an admin can publish.`
               );

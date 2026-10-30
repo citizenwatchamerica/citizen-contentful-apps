@@ -10,21 +10,23 @@ const entry = (id: string, fields: Record<string, Record<string, unknown>>, sys:
 });
 
 // A CMA that serves the root plus a table of linked entries and assets by id.
-const cmaWith = (root: unknown, entries: unknown[] = [], assets: unknown[] = []) => {
+const cmaWith = (root: unknown, entries: unknown[] = [], assets: unknown[] = [], published: unknown[] = []) => {
   const byIds = (items: any[]) =>
     vi.fn(async ({ query }: { query: Record<string, string> }) => {
       const ids = query['sys.id[in]'].split(',');
       return { items: items.filter(item => ids.includes(item.sys.id)) };
     });
   return {
-    entry: { get: vi.fn().mockResolvedValue(root), getMany: byIds(entries) },
+    entry: { get: vi.fn().mockResolvedValue(root), getMany: byIds(entries), getPublished: byIds(published) },
     asset: { getMany: byIds(assets) },
     contentType: {
       get: vi.fn().mockResolvedValue({
         displayField: 'title',
         fields: [
-          { id: 'title', localized: true },
-          { id: 'image', localized: true },
+          { id: 'title', name: 'Title', localized: true },
+          { id: 'image', name: 'Image', localized: true },
+          { id: 'focalPoint', name: 'Focal point', localized: false },
+          { id: 'internalName', name: 'Internal name', localized: false },
         ],
       }),
     },
@@ -92,6 +94,52 @@ describe('getLinkedContent', () => {
 
     const { items } = await getLinkedContent(cma, 'page', ['slides'], options);
     expect(items.map(item => item.id)).toEqual(['slide']);
+  });
+
+  it("offers an entry that's published in the region but has changed shared fields, naming them", async () => {
+    // Shared (non-localized) fields live under en-US, so publishing en-GB alone never sends them.
+    const upToDateInRegion = { publishedVersion: 18, version: 20, fieldStatus: { '*': { 'en-GB': 'published', 'en-US': 'changed' } } };
+    const cma: any = cmaWith(
+      entry('page', { slides: { 'en-GB': [entryLink('focal'), entryLink('same')] } }),
+      [
+        entry('focal', { focalPoint: { 'en-US': { x: 744 } }, internalName: { 'en-US': 'Same' } }, upToDateInRegion),
+        entry('same', { focalPoint: { 'en-US': { x: 1 } } }, upToDateInRegion),
+      ],
+      [],
+      [
+        entry('focal', { focalPoint: { 'en-US': { x: 1920 } }, internalName: { 'en-US': 'Same' } }),
+        entry('same', { focalPoint: { 'en-US': { x: 1 } } }),
+      ]
+    );
+
+    const { items } = await getLinkedContent(cma, 'page', ['slides'], options);
+    expect(items).toEqual([
+      expect.objectContaining({ id: 'focal', status: 'changed', sharedFieldChanges: ['Focal point'] }),
+    ]);
+  });
+
+  it("reports the root entry's own shared-field changes", async () => {
+    const cma: any = cmaWith(
+      entry('page', { internalName: { 'en-US': 'New name' } }, { publishedVersion: 3, version: 5 }),
+      [],
+      [],
+      [entry('page', { internalName: { 'en-US': 'Old name' } })]
+    );
+
+    const { rootSharedFieldChanges } = await getLinkedContent(cma, 'page', [], options);
+    expect(rootSharedFieldChanges).toEqual(['Internal name']);
+  });
+
+  it("flags the list as incomplete when the published copies can't be read", async () => {
+    const cma: any = cmaWith(
+      entry('page', { slides: { 'en-GB': [entryLink('focal')] } }),
+      [entry('focal', {}, { publishedVersion: 2, version: 5, fieldStatus: { '*': { 'en-GB': 'published', 'en-US': 'changed' } } })]
+    );
+    cma.entry.getPublished.mockRejectedValue(new Error('Forbidden'));
+
+    const { items, incomplete } = await getLinkedContent(cma, 'page', ['slides'], options);
+    expect(items).toEqual([]);
+    expect(incomplete).toBe(true);
   });
 
   it('flags the list as incomplete when a lookup fails', async () => {

@@ -114,9 +114,9 @@ describe('Dialog component', () => {
       ...mockSdk.parameters.invocation,
       fieldNames: { slides: 'Slides', hero: 'Hero' },
       linkedItems: [
-        { id: 'slide-1', type: 'Entry', title: 'Spring slide', status: 'draft', locales: ['en-GB'], fieldIds: ['slides'] },
-        { id: 'photo-1', type: 'Asset', title: 'Spring photo', status: 'draft', locales: ['en-GB'], fieldIds: ['slides'] },
-        { id: 'hero-1', type: 'Entry', title: 'Hero banner', status: 'changed', locales: ['en-US'], fieldIds: ['hero'] },
+        { id: 'slide-1', type: 'Entry', title: 'Spring slide', status: 'draft', locales: ['en-GB'], fieldIds: ['slides'], sharedFieldChanges: [] },
+        { id: 'photo-1', type: 'Asset', title: 'Spring photo', status: 'draft', locales: ['en-GB'], fieldIds: ['slides'], sharedFieldChanges: [] },
+        { id: 'hero-1', type: 'Entry', title: 'Hero banner', status: 'changed', locales: ['en-US'], fieldIds: ['hero'], sharedFieldChanges: [] },
       ],
     };
     const { getByText, container } = render(<Dialog />);
@@ -136,7 +136,7 @@ describe('Dialog component', () => {
     mockSdk.parameters.invocation = {
       ...mockSdk.parameters.invocation,
       linkedItems: [
-        { id: 'slide-1', type: 'Entry', title: 'Spring slide', status: 'draft', locales: ['en-GB'], fieldIds: ['slides'] },
+        { id: 'slide-1', type: 'Entry', title: 'Spring slide', status: 'draft', locales: ['en-GB'], fieldIds: ['slides'], sharedFieldChanges: [] },
       ],
     };
     const { getByText, queryByText, container } = render(<Dialog />);
@@ -145,6 +145,42 @@ describe('Dialog component', () => {
     expect(queryByText('Spring slide')).toBeNull();
     fireEvent.click(getByText('Publish selected regions (1)'));
     expect(mockSdk.close).toHaveBeenLastCalledWith({ locales: ['en-US'], linkedIds: [] });
+  });
+
+  it("names a linked item's changed shared fields", () => {
+    mockSdk.parameters.invocation = {
+      ...mockSdk.parameters.invocation,
+      defaultLocale: 'en-US',
+      linkedItems: [
+        { id: 'focal', type: 'Entry', title: 'Banner image', status: 'changed', locales: ['en-GB'], fieldIds: ['slides'], sharedFieldChanges: ['Focal point'] },
+      ],
+    };
+    const { getByText } = render(<Dialog />);
+    expect(getByText(/Shared fields changed: Focal point\. These go live with\s+English \(United States\)/)).toBeTruthy();
+  });
+
+  it("ticks the optional default locale when the entry's own shared fields changed, and says why", () => {
+    mockSdk.parameters.invocation = {
+      ...mockSdk.parameters.invocation,
+      optionalLocales: ['en-US'],
+      defaultLocale: 'en-US',
+      sharedFieldChanges: ['Slug'],
+    };
+    const { getByText, container } = render(<Dialog />);
+
+    expect(container.querySelector('#dialog-publish-en-US')).toHaveProperty('checked', true);
+    expect(getByText(/Slug has unpublished\s+changes/).textContent).toContain('which is ticked');
+  });
+
+  it("warns when the entry's shared-field changes need a default locale the user can't publish", () => {
+    mockSdk.parameters.invocation = {
+      ...mockSdk.parameters.invocation,
+      allowedLocales: ['en-GB'],
+      defaultLocale: 'en-US',
+      sharedFieldChanges: ['Slug', 'Size'],
+    };
+    const { getByText } = render(<Dialog />);
+    expect(getByText(/Slug, Size have unpublished/).textContent).toContain('only the owning team or an admin can publish them');
   });
 
   it('warns when the linked content list may be incomplete', () => {
