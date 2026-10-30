@@ -38,41 +38,51 @@ interface SearchControlProps extends SearchBarProps {
   fieldType: 'product' | 'category';
 }
 
-// eslint-disable-next-line @typescript-eslint/no-empty-function
-const noop = () => {};
-
 const SearchBar = (props: SearchBarProps) => {
   const sdk = useSDK<DialogAppSDK>();
   const { fieldType } = sdk.parameters.invocation as DialogInvocationParameters;
 
   const headerStyles = css`
-    padding: ${tokens.spacingM} ${tokens.spacingL} ${tokens.spacingL} ${tokens.spacingL};
+    padding: ${tokens.spacingM} ${tokens.spacingL};
     background-color: white;
+    border-bottom: 1px solid ${tokens.gray200};
     position: sticky;
     top: 0;
     z-index: 1;
   `;
 
   const controlProps = { ...props, fieldType };
+  const hasSelection = getSelectedIds(props.selectedItems).length > 0;
 
+  // Two rows: what is being searched (site, query) and Save on the first; what is
+  // already picked on the second, only once there is something to show.
   return (
-    <Flex as="header" justifyContent="space-between" alignItems="center" css={headerStyles}>
-      <Text
-        fontColor="gray700"
-        css={css`
-          flex-shrink: 0;
-          margin-right: ${tokens.spacingM};
-        `}>
-        Site:{' '}
-        <Text as="span" fontWeight="fontWeightDemiBold">
-          {props.siteId}
+    <Box as="header" css={headerStyles}>
+      <Flex alignItems="center" gap="spacingM">
+        <Text fontColor="gray700" css={{ flexShrink: 0 }}>
+          Site:{' '}
+          <Text as="span" fontWeight="fontWeightDemiBold">
+            {props.siteId}
+          </Text>
         </Text>
-      </Text>
-      <LeftSideControls {...controlProps} />
-      <RightSideControls {...controlProps} />
-    </Flex>
+        <LeftSideControls {...controlProps} />
+        {props.showSaveButton !== false && (
+          <Button
+            variant="primary"
+            onClick={props.onSave}
+            isDisabled={props.saveIsDisabled}
+            css={{ marginLeft: 'auto' }}>
+            Save
+          </Button>
+        )}
+      </Flex>
+      {(hasSelection || props.selectionLimitMessage) && <SelectionRow {...controlProps} />}
+    </Box>
   );
 };
+
+const getSelectedIds = (items?: string | string[]): string[] =>
+  !items ? [] : typeof items === 'string' ? [items] : items;
 
 const LeftSideControls = (props: SearchControlProps) => {
   const wrapperStyles = css`
@@ -122,49 +132,28 @@ const LeftSideControls = (props: SearchControlProps) => {
   );
 };
 
-const RightSideControls = (props: SearchControlProps) => {
-  return (
-    <Flex
-      justifyContent="flex-end"
-      alignItems="center"
-      flexGrow={1}
-      gap="spacingM"
-      css={{ flexWrap: 'wrap', rowGap: tokens.spacingS }}>
-      <Flex
-        flexDirection="column"
-        alignItems="flex-start"
+const SelectionRow = (props: SearchControlProps) => (
+  <Box marginTop="spacingS">
+    <SelectionList
+      items={props.selectedItems}
+      itemsInfo={props.selectedData}
+      removeSelected={props.removeSelected}
+      fieldType={props.fieldType}
+    />
+    {props.selectionLimitMessage && (
+      <Text
+        as="p"
+        fontSize="fontSizeS"
         css={css`
-          flex: 1 1 220px;
-          min-width: 0;
-          max-width: 100%;
+          color: ${tokens.colorWarning};
+          margin-top: ${tokens.spacingXs};
+          margin-bottom: 0;
         `}>
-        <SelectionList
-          items={props.selectedItems}
-          itemsInfo={props.selectedData}
-          removeSelected={props.removeSelected}
-          fieldType={props.fieldType}
-        />
-        {props.selectionLimitMessage && (
-          <Text
-            as="p"
-            fontSize="fontSizeS"
-            css={css`
-              color: ${tokens.colorWarning};
-              margin-top: ${tokens.spacingXs};
-              margin-bottom: 0;
-            `}>
-            {props.selectionLimitMessage}
-          </Text>
-        )}
-      </Flex>
-      {props.showSaveButton !== false && (
-        <Button variant="primary" onClick={props.onSave} isDisabled={props.saveIsDisabled}>
-          Save
-        </Button>
-      )}
-    </Flex>
-  );
-};
+        {props.selectionLimitMessage}
+      </Text>
+    )}
+  </Box>
+);
 
 interface SelectionListProps {
   items?: string | string[];
@@ -173,39 +162,19 @@ interface SelectionListProps {
   fieldType: 'product' | 'category';
 }
 
-const SelectionList = (props: SelectionListProps) => {
-  const items: string[] | undefined = typeof props.items === 'string' ? [props.items] : props.items;
-
-  // console.log(props)
-  const findItemData = (itemId: string, fieldType: 'product' | 'category', itemsInfo?: any[]) => {
-    if (itemsInfo?.length) {
-      return itemsInfo.find((item) => item.id === itemId);
-    }
-  };
-
-  return (
-    <Flex
-      gap="spacingXs"
-      flexWrap="wrap"
-      alignItems="center"
-      css={css`
-        flex: 1 1 220px;
-        min-width: 0;
-        max-width: 100%;
-      `}>
-      {items &&
-        items.map((itemId: string) => (
-          <SelectionListItem
-            key={itemId}
-            itemId={itemId}
-            itemData={findItemData(itemId, props.fieldType, props.itemsInfo)}
-            removeSelected={props.removeSelected}
-            fieldType={props.fieldType}
-          />
-        ))}
-    </Flex>
-  );
-};
+const SelectionList = (props: SelectionListProps) => (
+  <Flex gap="spacingXs" flexWrap="wrap" alignItems="center">
+    {getSelectedIds(props.items).map((itemId: string) => (
+      <SelectionListItem
+        key={itemId}
+        itemId={itemId}
+        itemData={props.itemsInfo.find((item) => item?.id === itemId)}
+        removeSelected={props.removeSelected}
+        fieldType={props.fieldType}
+      />
+    ))}
+  </Flex>
+);
 
 interface SelectionListItemProps {
   itemId: string;
@@ -214,117 +183,106 @@ interface SelectionListItemProps {
   removeSelected: (id: string) => void;
 }
 
+const chipSize = '40px';
+
+const chipStyles = css`
+  position: relative;
+  width: ${chipSize};
+  height: ${chipSize};
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid ${tokens.gray200};
+  border-radius: ${tokens.borderRadiusSmall};
+  background-color: ${tokens.gray100};
+  cursor: pointer;
+  transition: border-color ${tokens.transitionDurationDefault} ${tokens.transitionEasingDefault};
+  &:hover,
+  &:focus-visible {
+    border-color: ${tokens.gray500};
+  }
+  &:focus-visible {
+    outline: none;
+    box-shadow: ${tokens.glowPrimary};
+  }
+  &:hover > [data-remove],
+  &:focus-visible > [data-remove] {
+    opacity: 1;
+  }
+`;
+
+// Each layer fills the chip, so the image covers the placeholder instead of
+// stacking beneath it.
+const fillStyles = css`
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+`;
+
+const placeholderStyles = css`
+  ${fillStyles};
+  & svg {
+    fill: ${tokens.gray600};
+  }
+`;
+
+const imageStyles = css`
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+`;
+
+const removeStyles = css`
+  ${fillStyles};
+  background-color: rgba(0, 0, 0, 0.55);
+  opacity: 0;
+  transition: opacity ${tokens.transitionDurationDefault} ${tokens.transitionEasingDefault};
+`;
+
 const SelectionListItem = (props: SelectionListItemProps) => {
   const { itemId, itemData, fieldType } = props;
 
   const [imageHasLoaded, setImageHasLoaded] = useState<boolean>(false);
   const [imageHasErrored, setImageHasErrored] = useState<boolean>(false);
 
-  const ItemIcon = (props: { fieldType: string }) => {
-    return props.fieldType === 'product' ? <AssetIcon /> : <TagsIcon />;
-  };
-
-  const getProductPreviewImageUrl = (productInfo?: any) => {
-    return productInfo?.image?.absUrl || '';
-  };
-
-  const selectedItemWrapperStyles = css`
-    border: 1px solid;
-    border-color: ${tokens.gray200};
-    border-radius: 3px;
-    height: 40px;
-    width: 40px;
-    transition: all ${tokens.transitionDurationDefault} ${tokens.transitionEasingDefault};
-    transform: translateZ(0);
-    will-change: border-color;
-    &:hover {
-      border-color: ${tokens.gray500};
-      cursor: pointer;
-      & span > div {
-        opacity: 1;
-      }
-    }
-  `;
-
-  const closeActionStyles = css`
-    background-color: rgba(0, 0, 0, 0.65);
-    border-radius: 50%;
-    color: white;
-    opacity: 0;
-    width: 28px;
-    height: 28px;
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    transition: opacity ${tokens.transitionDurationDefault} ${tokens.transitionEasingDefault};
-    & svg {
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-    }
-  `;
-
-  const selectedItemIconStyles = css`
-    background-color: ${tokens.gray100};
-    width: 100%;
-    height: 40px;
-    position: relative;
-    z-index: -1;
-    & svg {
-      fill: ${tokens.gray600};
-      width: 100%;
-      height: 50%;
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-    }
-  `;
-
-  const selectedItemImageStyles = css`
-    display: ${imageHasLoaded ? 'block' : 'none'};
-    margin: 0 auto;
-    min-width: auto;
-    height: 40px;
-    overflow: hidden;
-  `;
+  const imageUrl = fieldType === 'product' ? itemData?.image?.absUrl : undefined;
+  const showImage = Boolean(imageUrl) && !imageHasErrored;
+  const PlaceholderIcon = !itemData
+    ? ErrorCircleIcon
+    : fieldType === 'product'
+    ? AssetIcon
+    : TagsIcon;
 
   return (
-    <Flex
-      role="switch"
-      aria-checked={true}
-      onKeyUp={noop}
-      onClick={() => props.removeSelected(itemId)}
-      flexDirection="column"
-      css={selectedItemWrapperStyles}>
-      <Tooltip content={itemId} placement="bottom">
-        <Box css={closeActionStyles}>
+    <Tooltip content={itemId} placement="bottom">
+      <button
+        type="button"
+        aria-label={`Remove ${itemId}`}
+        onClick={() => props.removeSelected(itemId)}
+        css={chipStyles}>
+        {!(showImage && imageHasLoaded) && (
+          <span css={placeholderStyles}>
+            <PlaceholderIcon />
+          </span>
+        )}
+        {showImage && (
+          <img
+            alt=""
+            src={imageUrl}
+            onLoad={() => setImageHasLoaded(true)}
+            onError={() => setImageHasErrored(true)}
+            css={imageStyles}
+            style={{ visibility: imageHasLoaded ? 'visible' : 'hidden' }}
+          />
+        )}
+        <span data-remove css={removeStyles}>
           <CloseIcon variant="white" />
-        </Box>
-
-        {fieldType === 'category' && (
-          <Box css={selectedItemIconStyles}>{itemData ? <TagsIcon /> : <ErrorCircleIcon />}</Box>
-        )}
-        {fieldType === 'product' && (
-          <>
-            <Box css={selectedItemIconStyles}>
-              {!itemData ? <ErrorCircleIcon /> : <ItemIcon fieldType={fieldType} />}
-            </Box>
-            {itemData && (
-              <img
-                alt="Product Preview"
-                onError={() => setImageHasErrored(true)}
-                onLoad={() => setImageHasLoaded(true)}
-                src={getProductPreviewImageUrl(itemData)}
-                css={selectedItemImageStyles}
-              />
-            )}
-          </>
-        )}
-      </Tooltip>
-    </Flex>
+        </span>
+      </button>
+    </Tooltip>
   );
 };
 
