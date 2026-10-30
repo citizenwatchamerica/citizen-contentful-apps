@@ -9,7 +9,6 @@ import {
   Button,
   Tooltip,
   Grid,
-  Select,
   Text,
 } from '@contentful/f36-components';
 import { SearchIcon, CloseIcon, ErrorCircleIcon, AssetIcon, TagsIcon } from '@contentful/f36-icons';
@@ -29,9 +28,8 @@ interface SearchBarProps {
   onQueryChange: (event: React.ChangeEvent<HTMLInputElement>) => void;
   onSave: () => void;
   removeSelected: (id: string) => void;
-  siteIds: string[];
-  selectedSiteId: string;
-  onSiteChange: (event: React.ChangeEvent<HTMLSelectElement>) => void;
+  // Fixed by the field's locale; shown so the editor knows which site results come from.
+  siteId: string;
   selectionLimitMessage?: string;
   showSaveButton?: boolean;
 }
@@ -42,28 +40,6 @@ interface SearchControlProps extends SearchBarProps {
 
 // eslint-disable-next-line @typescript-eslint/no-empty-function
 const noop = () => {};
-
-const siteSelectStyles = css`
-  flex-shrink: 0;
-  min-width: 200px;
-  margin-right: ${tokens.spacingM};
-`;
-
-const SiteSelector = (props: {
-  siteIds: string[];
-  selectedSiteId: string;
-  onSiteChange: (event: React.ChangeEvent<HTMLSelectElement>) => void;
-}) => (
-  <Box css={siteSelectStyles}>
-    <Select value={props.selectedSiteId} onChange={props.onSiteChange}>
-      {props.siteIds.map((siteId) => (
-        <Select.Option key={siteId} value={siteId}>
-          {siteId}
-        </Select.Option>
-      ))}
-    </Select>
-  </Box>
-);
 
 const SearchBar = (props: SearchBarProps) => {
   const sdk = useSDK<DialogAppSDK>();
@@ -81,13 +57,17 @@ const SearchBar = (props: SearchBarProps) => {
 
   return (
     <Flex as="header" justifyContent="space-between" alignItems="center" css={headerStyles}>
-      {props.siteIds.length > 1 && (
-        <SiteSelector
-          siteIds={props.siteIds}
-          selectedSiteId={props.selectedSiteId}
-          onSiteChange={props.onSiteChange}
-        />
-      )}
+      <Text
+        fontColor="gray700"
+        css={css`
+          flex-shrink: 0;
+          margin-right: ${tokens.spacingM};
+        `}>
+        Site:{' '}
+        <Text as="span" fontWeight="fontWeightDemiBold">
+          {props.siteId}
+        </Text>
+      </Text>
       <LeftSideControls {...controlProps} />
       <RightSideControls {...controlProps} />
     </Flex>

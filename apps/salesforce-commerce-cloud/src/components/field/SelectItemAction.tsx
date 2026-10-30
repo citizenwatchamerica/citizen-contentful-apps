@@ -26,7 +26,7 @@ const logoStyle = css`
 
 interface SelectItemActionProps {
   fieldValue?: string | string[];
-  siteIds: string[];
+  siteId?: string;
 }
 
 const SelectItemAction = (props: SelectItemActionProps) => {
@@ -43,7 +43,7 @@ const SelectItemAction = (props: SelectItemActionProps) => {
       : queryArray.push(props.fieldValue);
   }
 
-  const client = new SfccClient(installParameters, props.siteIds[0]);
+  const client = new SfccClient(installParameters, props.siteId);
   const siteMap = fieldType === 'category' ? readSiteMap(sdk) : {};
   const currentItemQueries = useQueries({
     queries: queryArray.map((rawId: string) => {
@@ -99,7 +99,6 @@ const SelectItemAction = (props: SelectItemActionProps) => {
       fieldType: fieldType,
       currentData: currentData,
       fieldValue: props.fieldValue,
-      siteIds: props.siteIds,
       siteMap: fieldType === 'category' ? readSiteMap(sdk) : undefined,
       locale: sdk.field.locale,
     };
@@ -117,8 +116,8 @@ const SelectItemAction = (props: SelectItemActionProps) => {
 
       // The companion field is added by hand per content type, so a failure to
       // write it is a setup problem worth surfacing rather than swallowing. The
-      // selection itself is already saved, and cards fall back to deriving the
-      // site from the category's catalog.
+      // selection itself is already saved, and cards fall back to looking the
+      // category up across every configured catalog.
       if (fieldType === 'category') {
         try {
           await writeSiteMap(sdk, result.siteMap);
