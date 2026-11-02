@@ -8,7 +8,7 @@ export const SITE_MAP_FIELD_ID = 'categoryCustomConnectorSites';
 export type SiteMap = Record<string, string>;
 
 // The companion field is absent until it has been added to the content type.
-// Callers fall back to deriving the site from the category's catalog.
+// Callers then look the category up across every configured catalog.
 export const siteMapFieldExists = (sdk: FieldAppSDK): boolean =>
   Boolean(sdk.entry.fields[SITE_MAP_FIELD_ID]);
 

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 
 // Contentful Imports
-import { Modal } from '@contentful/f36-components';
+import { Modal, Note } from '@contentful/f36-components';
 import { useSDK } from '@contentful/react-apps-toolkit';
 import { DialogAppSDK } from '@contentful/app-sdk';
 
@@ -13,6 +13,7 @@ import CategorySearchResults from './CategorySearchResults';
 import { AppInstallationParameters } from '../../locations/ConfigScreen';
 import { DialogInvocationParameters } from '../../locations/Dialog';
 import { SiteMap, pruneSiteMap } from '../../utils/siteMap';
+import { siteForLocale } from '../../utils/localeSites';
 
 export const headerHeight = 114;
 export const stickyHeaderBreakpoint = 900;
@@ -66,24 +67,40 @@ export const getProductSelectionLimitMessage = (
   return `The storefront cannot display more than ${MAX_PRODUCT_SELECTION} selected products at once. Remove one before adding another.`;
 };
 
+// The field is localized and each locale is served by one site, so the site is
+// fixed by the locale being edited rather than chosen in the picker.
 const SearchPicker = () => {
   const sdk = useSDK<DialogAppSDK>();
   const installParameters = sdk.parameters.installation as AppInstallationParameters;
-  const { selectMultiple, fieldType, fieldValue, currentData, siteIds, siteMap } = sdk.parameters
+  const { locale } = sdk.parameters.invocation as DialogInvocationParameters;
+  const siteId = siteForLocale(installParameters.localeSites, locale);
+
+  if (!siteId) {
+    return (
+      <Modal.Content>
+        <Note variant="warning">
+          No SFCC site is configured for {locale}. Map it to a site in the app configuration to
+          search here.
+        </Note>
+      </Modal.Content>
+    );
+  }
+
+  return <SiteSearchPicker siteId={siteId} />;
+};
+
+const SiteSearchPicker = ({ siteId }: { siteId: string }) => {
+  const sdk = useSDK<DialogAppSDK>();
+  const installParameters = sdk.parameters.installation as AppInstallationParameters;
+  const { selectMultiple, fieldType, fieldValue, currentData, siteMap } = sdk.parameters
     .invocation as DialogInvocationParameters;
 
-  const [selectedSiteId, setSelectedSiteId] = useState<string>(siteIds[0]);
   const [query, setQuery] = useState<string>('');
   const [queryIsFetching, setQueryIsFetching] = useState<boolean>(false);
   const [selected, setSelected] = useState<string | string[] | undefined>(fieldValue);
   const [selectedData, setSelectedItemsInfo] = useState<any[]>(currentData || []);
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [siteById, setSiteById] = useState<SiteMap>(siteMap || {});
-
-  const onSiteChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
-    setSelectedSiteId(event.target.value);
-    setSearchResults([]);
-  };
 
   const onQueryChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     setQuery(event.target.value);
@@ -94,12 +111,12 @@ const SearchPicker = () => {
     sdk.close({ value: selected, siteMap: pruneSiteMap(siteById, selectedIds) });
   };
 
-  // Which site was active when each item was picked. The site cannot be worked
-  // out later where sites share a catalog, so it is recorded at selection time.
+  // Which site each item was picked under. The site cannot be worked out later
+  // where sites share a catalog, so it is recorded at selection time.
   const recordSite = (id: string, isSelected: boolean) => {
     setSiteById((current) => {
       const next = { ...current };
-      isSelected ? (next[id] = selectedSiteId) : delete next[id];
+      isSelected ? (next[id] = siteId) : delete next[id];
       return next;
     });
   };
@@ -152,18 +169,18 @@ const SearchPicker = () => {
       } else {
         setSelected(id);
         setSelectedItemsInfo([findSearchResultData(id)]);
-        setSiteById({ [id]: selectedSiteId });
+        setSiteById({ [id]: siteId });
       }
     }
   };
 
   useEffect(() => {
-    // Set once a newer query or site supersedes this one. An earlier, slower
+    // Set once a newer query supersedes this one. An earlier, slower
     // request can resolve after a later one and would otherwise overwrite it.
     let isStale = false;
 
     const timeOutId = setTimeout(() => {
-      const client = new SfccClient(installParameters, selectedSiteId);
+      const client = new SfccClient(installParameters, siteId);
       const fetchResults =
         fieldType === 'product' ? client.searchProducts : client.searchCategories;
 
@@ -188,7 +205,7 @@ const SearchPicker = () => {
       isStale = true;
       clearTimeout(timeOutId);
     };
-  }, [fieldType, query, installParameters, selectedSiteId, sdk]);
+  }, [fieldType, query, installParameters, siteId, sdk]);
 
   const selectionLimitMessage = getProductSelectionLimitMessage(
     fieldType,
@@ -208,9 +225,7 @@ const SearchPicker = () => {
     selectedItems: selected,
     selectedData: selectedData,
     removeSelected: onItemSelect,
-    siteIds: siteIds,
-    selectedSiteId: selectedSiteId,
-    onSiteChange: onSiteChange,
+    siteId,
     selectionLimitMessage,
     showSaveButton: selectedItemCount < MAX_PRODUCT_SELECTION + 1,
   };

@@ -3,7 +3,7 @@ import { css } from '@emotion/react';
 import { useQuery } from '@tanstack/react-query';
 
 // Contentful Imports
-import { Card, Flex, Text, IconButton, Box } from '@contentful/f36-components';
+import { Card, Flex, Text, IconButton } from '@contentful/f36-components';
 import { WarningIcon, ExternalLinkIcon, CloseIcon } from '@contentful/f36-icons';
 import tokens from '@contentful/f36-tokens';
 import { useSDK } from '@contentful/react-apps-toolkit';
@@ -14,8 +14,8 @@ import { AppInstallationParameters } from '../../locations/ConfigScreen';
 import SfccClient, { parseCategoryId } from '../../utils/Sfcc';
 import { SiteMap } from '../../utils/siteMap';
 import { getLocalizedValue } from '../../utils/localized';
-import { SiteStockBadges } from '../InventoryBadge';
-import { StockBySite } from './useStockBySite';
+import InventoryBadge from '../InventoryBadge';
+import { SiteStock } from './useSiteStock';
 
 interface ItemProps {
   id: string;
@@ -24,9 +24,9 @@ interface ItemProps {
 }
 
 interface ItemCardProps extends ItemProps {
-  siteId: string;
+  siteId?: string;
   siteMap?: SiteMap;
-  stockBySite?: StockBySite;
+  siteStock?: SiteStock;
   withDragHandle?: boolean;
   dragHandleRender?: (props: {
     isDragging?: boolean;
@@ -49,23 +49,6 @@ const ItemCard = (props: ItemCardProps) => {
         ? () => client.fetchProduct(itemId)
         : () => client.fetchCategoryById(itemId, storedSiteId),
   });
-  const { data: catalogSites } = useQuery({
-    queryKey: ['catalogSites', itemData?.catalogId],
-    queryFn: () => client.fetchSitesForCatalog(itemData.catalogId),
-    enabled: props.type === 'category' && Boolean(itemData?.catalogId),
-  });
-
-  // Prefer the site recorded when the category was selected, but only once it is
-  // confirmed to serve this category's catalog — a stored site that does not is
-  // stale, and the catalog's own sites are the better answer. Until that check
-  // resolves, show the stored site rather than flickering through an empty state.
-  const sites = !catalogSites
-    ? storedSiteId
-      ? [storedSiteId]
-      : []
-    : storedSiteId && catalogSites.includes(storedSiteId)
-    ? [storedSiteId]
-    : catalogSites;
 
   return (
     <Card
@@ -79,8 +62,7 @@ const ItemCard = (props: ItemCardProps) => {
             <ItemPreview
               id={props.id}
               type={props.type}
-              sites={sites}
-              stockBySite={props.stockBySite}
+              siteStock={props.siteStock}
               itemData={itemData}
               locale={sdk.field.locale}
               onRemove={props.onRemove}
@@ -97,17 +79,12 @@ const ItemCard = (props: ItemCardProps) => {
 interface ItemPreviewProps extends ItemProps {
   itemData: any;
   locale: string;
-  sites: string[];
-  stockBySite?: StockBySite;
+  siteStock?: SiteStock;
 }
 
 const ItemPreview = (props: ItemPreviewProps) => {
   const { itemData } = props;
   const useImage = props.type === 'product';
-
-  const categoryStyle = css`
-    margin-left: ${tokens.spacingXs};
-  `;
 
   const badgeStyles = css`
     align-self: flex-start;
@@ -139,27 +116,9 @@ const ItemPreview = (props: ItemPreviewProps) => {
         </Text>
         <Text as="div" fontWeight="fontWeightMedium" fontSize="fontSizeS" fontColor="gray600">
           ID: {itemData.id}
-          {props.type === 'category' && props.sites.length > 0 && (
-            <>
-              <Box
-                as="span"
-                css={css`
-                  margin-left: ${tokens.spacingXs};
-                `}>
-                |
-              </Box>
-              <Box as="span" css={categoryStyle}>
-                {props.sites.length === 1 ? 'Site' : 'Sites'}: {props.sites.join(', ')}
-              </Box>
-            </>
-          )}
         </Text>
-        {props.type === 'product' && props.stockBySite && (
-          <SiteStockBadges
-            stockBySite={props.stockBySite}
-            productId={itemData.id}
-            css={badgeStyles}
-          />
+        {props.type === 'product' && (
+          <InventoryBadge availability={props.siteStock?.[itemData.id]} css={badgeStyles} />
         )}
         <ItemActions {...actionsProps} />
       </Flex>

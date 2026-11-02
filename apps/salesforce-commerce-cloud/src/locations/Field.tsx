@@ -7,10 +7,11 @@ import { Note } from '@contentful/f36-components';
 import SelectItemAction from '../components/field/SelectItemAction';
 import SingleItem from '../components/field/SingleItem';
 import MultipleItems from '../components/field/MultipleItems';
-import { useStockBySite } from '../components/field/useStockBySite';
+import { useSiteStock } from '../components/field/useSiteStock';
 
 import { KeyValueMap } from 'contentful-management';
-import { AppInstallationParameters, parseSiteIds } from './ConfigScreen';
+import { AppInstallationParameters } from './ConfigScreen';
+import { siteForLocale } from '../utils/localeSites';
 import {
   SITE_MAP_FIELD_ID,
   SiteMap,
@@ -29,19 +30,14 @@ const Field = () => {
   const sdk = useSDK<FieldAppSDK>();
   const installParameters = sdk.parameters.installation as AppInstallationParameters;
   const { fieldType } = sdk.parameters.instance as AppInstanceParameters;
-  const siteIds = parseSiteIds(installParameters.siteIds);
+  const siteId = siteForLocale(installParameters.localeSites, sdk.field.locale);
 
   const selectMultiple = sdk.field.type === 'Array';
   const [value, setValue] = useState<string | string[]>(sdk.field.getValue());
   const [siteMap, setSiteMap] = useState<SiteMap>(() => readSiteMap(sdk));
 
   const productIds = !value ? [] : Array.isArray(value) ? value : [value];
-  const stockBySite = useStockBySite(
-    installParameters,
-    siteIds,
-    productIds,
-    fieldType === 'product'
-  );
+  const siteStock = useSiteStock(installParameters, siteId, productIds, fieldType === 'product');
 
   useEffect(() => {
     const valueChangeHandler = async (value: string | string[]) => {
@@ -69,22 +65,22 @@ const Field = () => {
           {selectMultiple ? (
             <MultipleItems
               value={value as string[]}
-              siteId={siteIds[0]}
+              siteId={siteId}
               siteMap={siteMap}
-              stockBySite={stockBySite}
+              siteStock={siteStock}
             />
           ) : (
             <SingleItem
               value={value as string}
-              siteId={siteIds[0]}
+              siteId={siteId}
               siteMap={siteMap}
-              stockBySite={stockBySite}
+              siteStock={siteStock}
             />
           )}
         </>
       )}
       {(!value?.length || selectMultiple) && (
-        <SelectItemAction fieldValue={value} siteIds={siteIds} />
+        <SelectItemAction fieldValue={value} siteId={siteId} />
       )}
     </>
   );
@@ -101,7 +97,8 @@ const SiteMapFieldWarning = () => {
       <Note variant="warning" style={{ marginBottom: '0.75rem' }}>
         The selected site cannot be recorded: this content type has no{' '}
         <code>{SITE_MAP_FIELD_ID}</code> field. Add a JSON Object field with that exact ID to
-        record it. Cards fall back to showing every site the category&apos;s catalog serves.
+        record it. Without it, a category ID found in several catalogs can show another
+        site&apos;s copy.
       </Note>
     );
   }

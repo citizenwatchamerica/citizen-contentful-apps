@@ -17,16 +17,16 @@ import { DragHandle } from '@contentful/f36-components';
 import ItemCard from './ItemCard';
 import { SiteMap, readSiteMap, writeSiteMap, removeFromSiteMap } from '../../utils/siteMap';
 import { parseCategoryId } from '../../utils/Sfcc';
-import { StockBySite } from './useStockBySite';
+import { SiteStock } from './useSiteStock';
 
 interface MultipleItemsProps {
   value: string[];
-  siteId: string;
+  siteId?: string;
   siteMap?: SiteMap;
-  stockBySite?: StockBySite;
+  siteStock?: SiteStock;
 }
 
-const MultipleItems = ({ value: items, siteId, siteMap, stockBySite }: MultipleItemsProps) => {
+const MultipleItems = ({ value: items, siteId, siteMap, siteStock }: MultipleItemsProps) => {
   const sdk = useSDK<FieldAppSDK>();
   const { fieldType } = sdk.parameters.instance as AppInstanceParameters;
 
@@ -67,7 +67,7 @@ const MultipleItems = ({ value: items, siteId, siteMap, stockBySite }: MultipleI
                 type={fieldType}
                 siteId={siteId}
                 siteMap={siteMap}
-                stockBySite={stockBySite}
+                siteStock={siteStock}
                 onRemove={onRemoveItem}
                 withDragHandle={true}
               />
