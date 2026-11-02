@@ -20,6 +20,7 @@ import {
 } from './SearchPicker';
 
 const imageHeight = 290;
+const imageWidth = 400;
 
 const ProductSearchResults = (props: SearchResultsProps) => {
   const resultsStyles = css`
@@ -160,7 +161,7 @@ const ProductSearchResult = (props: SearchResultProps) => {
         css={productStylesCss}>
         {!imageHasLoaded && !imageHasErrored && (
           <SkeletonContainer css={skeletonImageStyles}>
-            <SkeletonImage width={400} height={imageHeight} />
+            <SkeletonImage width={imageWidth} height={imageHeight} />
           </SkeletonContainer>
         )}
         {imageHasErrored && (
