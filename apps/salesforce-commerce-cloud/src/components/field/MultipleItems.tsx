@@ -15,30 +15,21 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import { DragHandle } from '@contentful/f36-components';
 import ItemCard from './ItemCard';
-import { SiteMap, readSiteMap, writeSiteMap, removeFromSiteMap } from '../../utils/siteMap';
-import { parseCategoryId } from '../../utils/Sfcc';
 import { SiteStock } from './useSiteStock';
 
 interface MultipleItemsProps {
   value: string[];
   siteId?: string;
-  siteMap?: SiteMap;
   siteStock?: SiteStock;
 }
 
-const MultipleItems = ({ value: items, siteId, siteMap, siteStock }: MultipleItemsProps) => {
+const MultipleItems = ({ value: items, siteId, siteStock }: MultipleItemsProps) => {
   const sdk = useSDK<FieldAppSDK>();
   const { fieldType } = sdk.parameters.instance as AppInstanceParameters;
 
   const onRemoveItem = async (id: string) => {
     const updatedItems = items.filter((value) => value !== id);
     updatedItems.length ? await sdk.field.setValue(updatedItems) : await sdk.field.removeValue();
-
-    // Categories only — a product connector field on the same content type would
-    // otherwise prune the category map using product ids.
-    if (fieldType === 'category') {
-      await writeSiteMap(sdk, removeFromSiteMap(readSiteMap(sdk), parseCategoryId(id)));
-    }
   };
 
   const handleDragEnd = async (event: any) => {
@@ -66,7 +57,6 @@ const MultipleItems = ({ value: items, siteId, siteMap, siteStock }: MultipleIte
                 id={id}
                 type={fieldType}
                 siteId={siteId}
-                siteMap={siteMap}
                 siteStock={siteStock}
                 onRemove={onRemoveItem}
                 withDragHandle={true}

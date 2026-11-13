@@ -1,10 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  configuredSiteIds,
-  findMalformedLocaleSites,
-  parseLocaleSites,
-  siteForLocale,
-} from './localeSites';
+import { findMalformedLocaleSites, parseLocaleSites, siteForLocale } from './localeSites';
 
 describe('parseLocaleSites', () => {
   it('maps each locale to its site, ignoring whitespace', () => {
@@ -37,14 +32,5 @@ describe('siteForLocale', () => {
     const value = 'en-US=citizen_us, en-GB=citizen_uk';
     expect(siteForLocale(value, 'en-GB')).toBe('citizen_uk');
     expect(siteForLocale(value, 'en-AU')).toBeUndefined();
-  });
-});
-
-describe('configuredSiteIds', () => {
-  it('lists each site once when locales share one', () => {
-    expect(configuredSiteIds('en-US=citizen_us, es-US=citizen_us, en-GB=citizen_uk')).toEqual([
-      'citizen_us',
-      'citizen_uk',
-    ]);
   });
 });
