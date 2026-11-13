@@ -28,8 +28,3 @@ export const findMalformedLocaleSites = (value?: string): string[] =>
 
 export const siteForLocale = (value: string | undefined, locale: string): string | undefined =>
   parseLocaleSites(value)[locale];
-
-// Every mapped site, once each. Several locales can share a site.
-export const configuredSiteIds = (value?: string): string[] => [
-  ...new Set(Object.values(parseLocaleSites(value))),
-];

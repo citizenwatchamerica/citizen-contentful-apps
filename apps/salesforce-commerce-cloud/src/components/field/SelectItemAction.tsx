@@ -15,7 +15,6 @@ import SfccClient, { parseCategoryId } from '../../utils/Sfcc';
 import { AppInstallationParameters } from '../../locations/ConfigScreen';
 import { DialogInvocationParameters } from '../../locations/Dialog';
 import { SearchPickerResult } from '../dialog/SearchPicker';
-import { SITE_MAP_FIELD_ID, readSiteMap, writeSiteMap } from '../../utils/siteMap';
 
 const logoStyle = css`
   display: block;
@@ -44,17 +43,15 @@ const SelectItemAction = (props: SelectItemActionProps) => {
   }
 
   const client = new SfccClient(installParameters, props.siteId);
-  const siteMap = fieldType === 'category' ? readSiteMap(sdk) : {};
   const currentItemQueries = useQueries({
     queries: queryArray.map((rawId: string) => {
       const id = fieldType === 'category' ? parseCategoryId(rawId) : rawId;
-      const storedSiteId = siteMap[id];
       return {
-        queryKey: ['itemInfo', id, storedSiteId],
+        queryKey: ['itemInfo', id, props.siteId],
         queryFn:
           fieldType === 'product'
             ? () => client.fetchProduct(id)
-            : () => client.fetchCategoryById(id, storedSiteId),
+            : () => client.fetchCategoryById(id),
       };
     }),
   });
@@ -99,7 +96,6 @@ const SelectItemAction = (props: SelectItemActionProps) => {
       fieldType: fieldType,
       currentData: currentData,
       fieldValue: props.fieldValue,
-      siteMap: fieldType === 'category' ? readSiteMap(sdk) : undefined,
       locale: sdk.field.locale,
     };
 
@@ -113,20 +109,6 @@ const SelectItemAction = (props: SelectItemActionProps) => {
       if (!result?.value?.length) return;
 
       await sdk.field.setValue(result.value);
-
-      // The companion field is added by hand per content type, so a failure to
-      // write it is a setup problem worth surfacing rather than swallowing. The
-      // selection itself is already saved, and cards fall back to looking the
-      // category up across every configured catalog.
-      if (fieldType === 'category') {
-        try {
-          await writeSiteMap(sdk, result.siteMap);
-        } catch {
-          sdk.notifier.error(
-            `Saved the selection, but could not record the site in ${SITE_MAP_FIELD_ID}.`
-          );
-        }
-      }
     }
   };
 

@@ -12,7 +12,6 @@ import ProductSearchResults from './ProductSearchResults';
 import CategorySearchResults from './CategorySearchResults';
 import { AppInstallationParameters } from '../../locations/ConfigScreen';
 import { DialogInvocationParameters } from '../../locations/Dialog';
-import { SiteMap, pruneSiteMap } from '../../utils/siteMap';
 import { siteForLocale } from '../../utils/localeSites';
 
 export const headerHeight = 114;
@@ -29,7 +28,7 @@ export const canAddSelectedProduct = (
   fieldType: 'product' | 'category',
   selectMultiple: boolean,
   selected: string | string[] | undefined,
-  id: string,
+  id: string
 ) => {
   if (fieldType !== 'product' || !selectMultiple) {
     return true;
@@ -46,7 +45,7 @@ export const canAddSelectedProduct = (
 export const hasReachedProductLimit = (
   fieldType: 'product' | 'category',
   selectMultiple: boolean,
-  selected: string | string[] | undefined,
+  selected: string | string[] | undefined
 ) => {
   if (fieldType !== 'product' || !selectMultiple) {
     return false;
@@ -58,7 +57,7 @@ export const hasReachedProductLimit = (
 export const getProductSelectionLimitMessage = (
   fieldType: 'product' | 'category',
   selectMultiple: boolean,
-  selected: string | string[] | undefined,
+  selected: string | string[] | undefined
 ) => {
   if (!hasReachedProductLimit(fieldType, selectMultiple, selected)) {
     return undefined;
@@ -92,7 +91,7 @@ const SearchPicker = () => {
 const SiteSearchPicker = ({ siteId }: { siteId: string }) => {
   const sdk = useSDK<DialogAppSDK>();
   const installParameters = sdk.parameters.installation as AppInstallationParameters;
-  const { selectMultiple, fieldType, fieldValue, currentData, siteMap } = sdk.parameters
+  const { selectMultiple, fieldType, fieldValue, currentData } = sdk.parameters
     .invocation as DialogInvocationParameters;
 
   const [query, setQuery] = useState<string>('');
@@ -100,25 +99,13 @@ const SiteSearchPicker = ({ siteId }: { siteId: string }) => {
   const [selected, setSelected] = useState<string | string[] | undefined>(fieldValue);
   const [selectedData, setSelectedItemsInfo] = useState<any[]>(currentData || []);
   const [searchResults, setSearchResults] = useState<any[]>([]);
-  const [siteById, setSiteById] = useState<SiteMap>(siteMap || {});
 
   const onQueryChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     setQuery(event.target.value);
   };
 
   const onSave = () => {
-    const selectedIds = typeof selected === 'string' ? [selected] : selected || [];
-    sdk.close({ value: selected, siteMap: pruneSiteMap(siteById, selectedIds) });
-  };
-
-  // Which site each item was picked under. The site cannot be worked out later
-  // where sites share a catalog, so it is recorded at selection time.
-  const recordSite = (id: string, isSelected: boolean) => {
-    setSiteById((current) => {
-      const next = { ...current };
-      isSelected ? (next[id] = siteId) : delete next[id];
-      return next;
-    });
+    sdk.close({ value: selected });
   };
 
   const findSearchResultData = (id: string) => {
@@ -139,7 +126,6 @@ const SiteSearchPicker = ({ siteId }: { siteId: string }) => {
         // Empty array, Initial Value
         setSelected([id]);
         setSelectedItemsInfo([findSearchResultData(id)]);
-        recordSite(id, true);
       } else {
         // Array exists, modify it
 
@@ -150,11 +136,9 @@ const SiteSearchPicker = ({ siteId }: { siteId: string }) => {
           // Item exists in array, unset it
           updateSelected.splice(includedIndex, 1);
           updateSelectedData = selectedData.filter((item) => item.id !== id);
-          recordSite(id, false);
         } else {
           updateSelected.push(id);
           updateSelectedData = [...selectedData, findSearchResultData(id)];
-          recordSite(id, true);
         }
 
         setSelected(updateSelected);
@@ -165,11 +149,9 @@ const SiteSearchPicker = ({ siteId }: { siteId: string }) => {
       if (selected === id) {
         setSelected('');
         setSelectedItemsInfo([]);
-        setSiteById({});
       } else {
         setSelected(id);
         setSelectedItemsInfo([findSearchResultData(id)]);
-        setSiteById({ [id]: siteId });
       }
     }
   };
@@ -210,7 +192,7 @@ const SiteSearchPicker = ({ siteId }: { siteId: string }) => {
   const selectionLimitMessage = getProductSelectionLimitMessage(
     fieldType,
     Boolean(selectMultiple),
-    selected,
+    selected
   );
 
   const selectedItemCount = getSelectedItems(selected).length;
@@ -250,7 +232,6 @@ const SiteSearchPicker = ({ siteId }: { siteId: string }) => {
 
 export interface SearchPickerResult {
   value: string | string[];
-  siteMap: SiteMap;
 }
 
 export interface SearchResultsProps {

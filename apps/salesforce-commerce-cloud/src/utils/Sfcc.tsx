@@ -1,6 +1,5 @@
 import axios, { AxiosInstance, InternalAxiosRequestConfig } from 'axios';
 import { AppInstallationParameters } from '../locations/ConfigScreen';
-import { configuredSiteIds } from './localeSites';
 
 // Handles legacy composite keys ("catalogId:categoryId") by extracting just the category ID.
 // New format stores only the category ID, so this is a no-op for new values.
@@ -190,10 +189,7 @@ class SfccClient {
     );
 
     return Object.fromEntries(
-      (searchResults.hits || []).map((hit: any) => [
-        hit.id,
-        { ats: hit.ats, inStock: hit.inStock },
-      ])
+      (searchResults.hits || []).map((hit: any) => [hit.id, { ats: hit.ats, inStock: hit.inStock }])
     );
   };
 
@@ -232,18 +228,6 @@ class SfccClient {
 
   public fetchSiteCatalogId = async (): Promise<string | null> =>
     this.siteId ? this.fetchCatalogIdForSite(this.siteId) : null;
-
-  // Every catalog serving any configured site. A saved category may have been
-  // selected under any of them, so looking one up cannot assume a single site.
-  public fetchConfiguredCatalogIds = async (): Promise<string[]> => {
-    const catalogs = await this.fetchCatalogs();
-    const siteIds = configuredSiteIds(this.parameters.localeSites);
-
-    return catalogs
-      .filter((cat: any) => cat.assignedSites?.some((site: any) => siteIds.includes(site.id)))
-      .map((cat: any) => cat.id)
-      .filter(Boolean);
-  };
 
   private buildCategoryQuery = (catalogIds: string[], query?: string) => {
     const must: any[] = [
@@ -315,23 +299,17 @@ class SfccClient {
     return searchResults.hits?.[0] || null;
   };
 
-  // Category IDs are only unique within a catalog, so the same ID can sit in
-  // several of them. When the site a category was selected under is known, look
-  // it up in that site's catalog first — searching every catalog would return an
-  // arbitrary copy, possibly another site's. Falls back to a
-  // catalog-wide search so a category that has since moved is still found.
-  public fetchCategoryById = async (categoryId: string, preferredSiteId?: string) => {
-    if (preferredSiteId) {
-      const catalogId = await this.fetchCatalogIdForSite(preferredSiteId);
+  // Looks the category up only in this client's site catalog (the field
+  // locale's site), matching the storefront, which resolves categories against
+  // its own site alone. Category IDs are unique only within a catalog, so a
+  // wider search could return another site's copy and hide a value that does
+  // not work on this site. With no catalog, return nothing rather than search
+  // unfiltered: buildCategoryQuery drops the catalog filter for an empty list.
+  public fetchCategoryById = async (categoryId: string) => {
+    const catalogId = await this.fetchSiteCatalogId();
+    if (!catalogId) return null;
 
-      if (catalogId) {
-        const scopedHit = await this.searchCategoryInCatalogs(categoryId, [catalogId]);
-        if (scopedHit) return scopedHit;
-      }
-    }
-
-    const catalogIds = await this.fetchConfiguredCatalogIds();
-    return this.searchCategoryInCatalogs(categoryId, catalogIds);
+    return this.searchCategoryInCatalogs(categoryId, [catalogId]);
   };
 }
 

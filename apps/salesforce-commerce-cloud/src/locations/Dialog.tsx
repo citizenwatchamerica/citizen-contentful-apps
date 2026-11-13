@@ -4,14 +4,12 @@ import { KeyValueMap } from 'contentful-management';
 import { /* useCMA, */ useSDK, useAutoResizer } from '@contentful/react-apps-toolkit';
 import { Modal, Flex } from '@contentful/f36-components';
 import SearchPicker from '../components/dialog/SearchPicker';
-import { SiteMap } from '../utils/siteMap';
 
 export interface DialogInvocationParameters extends KeyValueMap {
   selectMultiple: boolean;
   fieldType: 'product' | 'category';
   fieldValue?: string | string[];
   currentData?: any | any[];
-  siteMap?: SiteMap;
   // The calling field's locale. It decides which site the picker searches, and
   // supplies a name when SFCC has no default one.
   locale: string;

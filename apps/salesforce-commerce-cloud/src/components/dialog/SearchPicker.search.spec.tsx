@@ -22,7 +22,6 @@ const sdk = {
       fieldValue: [],
       currentData: [],
       locale: 'en-US',
-      siteMap: {},
     },
   },
   notifier: { error: notifierError },
